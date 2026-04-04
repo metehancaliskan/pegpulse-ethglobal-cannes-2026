@@ -16,11 +16,14 @@ import {
   ShieldAlert,
   Landmark,
   X,
+  Plus,
+  Settings,
   Wallet2,
 } from 'lucide-react'
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useWalletClient } from 'wagmi'
 import {
   ARC_NETWORK,
+  createMarket,
   fetchDashboardData,
   formatAmount,
   outcomeLabel,
@@ -37,7 +40,7 @@ import eurcLogo from './assets/EURC-logo.png'
 import pegPulseLogo from './assets/pegpulse_logo.png'
 import usdcLogo from './assets/USDC-logo.png'
 
-type AppMode = 'landing' | 'markets'
+type AppMode = 'landing' | 'markets' | 'admin'
 
 type MarketDescriptor = {
   symbol: string
@@ -98,6 +101,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   const isMarketPage = mode === 'markets'
+  const isAdminPage = mode === 'admin'
 
   const refreshDashboard = useCallback(
     async (connectedAddress?: string | null, showSpinner = false) => {
@@ -274,6 +278,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
 
   const goToMarketPage = () => router.push('/markets')
   const goToLandingPage = () => router.push('/')
+  const goToAdminPage = () => router.push('/admin')
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-text">
@@ -304,15 +309,26 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
 
           <div className="flex flex-col items-start gap-3 sm:items-end">
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={isMarketPage ? goToLandingPage : goToMarketPage}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
-              >
-                {isMarketPage && <ChevronLeft className="h-4 w-4" />}
-                {isMarketPage ? 'Overview' : 'Get Started'}
-              </button>
-              {isMarketPage ? (
+              {(isMarketPage || isAdminPage) && (
+                <button
+                  type="button"
+                  onClick={goToLandingPage}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Overview
+                </button>
+              )}
+              {!isMarketPage && !isAdminPage && (
+                <button
+                  type="button"
+                  onClick={isOwner ? goToAdminPage : goToMarketPage}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
+                >
+                  Get Started
+                </button>
+              )}
+              {(isMarketPage || isAdminPage) ? (
                 <>
                   <button
                     type="button"
@@ -411,7 +427,27 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
 
         <main className="mt-6 grid gap-8">
           <p className="sr-only">{statusMessage}</p>
-          {isMarketPage ? (
+          {isAdminPage ? (
+            <AdminPanel
+              markets={markets}
+              isOwner={isOwner}
+              isConnected={isConnected}
+              isBusy={actionLoading !== null}
+              isRefreshing={isRefreshing}
+              onRefresh={() => void refreshDashboard(address, true)}
+              onCreateMarket={(description) =>
+                executeAction('Creating market', async (client) => {
+                  await createMarket(client, description)
+                })
+              }
+              onSettle={(marketAddress, outcome) =>
+                executeAction('Settling market', async (client) => {
+                  await settleMarket(client, marketAddress, outcome)
+                })
+              }
+              onConnect={() => setIsConnectModalOpen(true)}
+            />
+          ) : isMarketPage ? (
             <>
               <section className="grid gap-6">
                 <motion.div
@@ -420,25 +456,9 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                   transition={{ delay: 0.05 }}
                   className="glass-card rounded-[30px] p-6"
                 >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="panel-label">Market Board</p>
-                      <h3 className="mt-2 font-display text-2xl font-semibold text-slate-900">
-                        Active hedge markets
-                      </h3>
-                      <p className="mt-2 text-sm text-muted">
-                        Connect your wallet and enter only the markets that are currently live.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void refreshDashboard(address, true)}
-                      className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-sm text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
-                    >
-                      <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                      Refresh
-                    </button>
-                  </div>
+                  <h3 className="font-display text-2xl font-semibold text-slate-900">
+                    Active hedge markets
+                  </h3>
 
                   <div className="mt-6 grid gap-5">
                     {isLoading ? (
@@ -504,7 +524,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                     <div className="mt-8 flex flex-wrap gap-3">
                       <button
                         type="button"
-                        onClick={goToMarketPage}
+                        onClick={isOwner ? goToAdminPage : goToMarketPage}
                         className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
                       >
                         Get Started
@@ -542,19 +562,11 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                     transition={{ delay: 0.12 + index * 0.05 }}
                     className="glass-card rounded-[30px] p-6"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <TokenBadge symbol={asset.symbol} size="lg" />
-                        <div>
-                          <h3 className="font-display text-2xl font-semibold text-slate-900">
-                            {asset.symbol}
-                          </h3>
-                          <p className="text-sm text-muted">{asset.note}</p>
-                        </div>
-                      </div>
-                      <div className="rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cyan">
-                        {asset.riskLabel}
-                      </div>
+                    <div className="flex items-center gap-4">
+                      <TokenBadge symbol={asset.symbol} size="lg" />
+                      <h3 className="font-display text-2xl font-semibold text-slate-900">
+                        {asset.symbol}
+                      </h3>
                     </div>
 
                     <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -598,6 +610,208 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
         </main>
       </div>
     </div>
+  )
+}
+
+type AdminPanelProps = {
+  markets: MarketView[]
+  isOwner: boolean
+  isConnected: boolean
+  isBusy: boolean
+  isRefreshing: boolean
+  onRefresh: () => void
+  onCreateMarket: (description: string) => Promise<void>
+  onSettle: (marketAddress: string, outcome: 1 | 2 | 3) => Promise<void>
+  onConnect: () => void
+}
+
+function AdminPanel({
+  markets,
+  isOwner,
+  isConnected,
+  isBusy,
+  isRefreshing,
+  onRefresh,
+  onCreateMarket,
+  onSettle,
+  onConnect,
+}: AdminPanelProps) {
+  const [description, setDescription] = useState('')
+
+  if (!isConnected) {
+    return (
+      <section className="grid gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-[30px] p-6 text-center"
+        >
+          <Settings className="mx-auto h-12 w-12 text-muted/40" />
+          <h3 className="mt-4 font-display text-2xl font-semibold text-slate-900">
+            Admin Panel
+          </h3>
+          <p className="mt-2 text-sm text-muted">
+            Connect the owner wallet to access admin controls.
+          </p>
+          <button
+            type="button"
+            onClick={onConnect}
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
+          >
+            <Wallet2 className="h-4 w-4" />
+            Connect Wallet
+          </button>
+        </motion.div>
+      </section>
+    )
+  }
+
+  if (!isOwner) {
+    return (
+      <section className="grid gap-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-[30px] p-6 text-center"
+        >
+          <ShieldAlert className="mx-auto h-12 w-12 text-red-400" />
+          <h3 className="mt-4 font-display text-2xl font-semibold text-slate-900">
+            Access Denied
+          </h3>
+          <p className="mt-2 text-sm text-muted">
+            This wallet is not the contract owner. Only the owner can access admin controls.
+          </p>
+        </motion.div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="grid gap-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        className="glass-card rounded-[30px] p-6"
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="panel-label">Admin Controls</p>
+            <h3 className="mt-2 font-display text-2xl font-semibold text-slate-900">
+              Create &amp; Settle Markets
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-sm text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
+          >
+            <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+
+        <div className="mt-6 rounded-[24px] border border-slate-200/80 bg-white/75 p-5">
+          <h4 className="font-display text-lg font-semibold text-slate-900">Create New Market</h4>
+          <p className="mt-1 text-sm text-muted">
+            Enter a description like: &quot;USDC de-pegs below $0.99 by July 1 2026&quot;
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              type="text"
+              className="flex-1 rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan/40"
+              placeholder="Market description..."
+            />
+            <button
+              type="button"
+              disabled={!description.trim() || isBusy}
+              onClick={() => {
+                void onCreateMarket(description.trim())
+                setDescription('')
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-royal px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+              Create Market
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4">
+          <h4 className="font-display text-lg font-semibold text-slate-900">
+            All Markets ({markets.length})
+          </h4>
+          {markets.length === 0 ? (
+            <div className="rounded-[26px] border border-dashed border-slate-200/80 bg-white/80 px-5 py-10 text-center text-muted">
+              No markets created yet.
+            </div>
+          ) : (
+            markets.map((market, index) => (
+              <div
+                key={market.address}
+                className="rounded-[24px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(238,244,255,0.95))] p-5"
+              >
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-muted">
+                        #{index + 1}
+                      </span>
+                      <span
+                        className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${
+                          market.isSettled
+                            ? 'border border-green-200 bg-green-50 text-green-700'
+                            : 'border border-cyan/20 bg-cyan/10 text-cyan'
+                        }`}
+                      >
+                        {market.isSettled ? outcomeLabel(market.outcome) : 'Open'}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-900">{market.description}</p>
+                    <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
+                      <span>Yes Pool: {formatAmount(market.totalWinBets)} USDC</span>
+                      <span>No Pool: {formatAmount(market.totalLoseBets)} USDC</span>
+                      <span className="font-mono text-[10px]">{market.address}</span>
+                    </div>
+                  </div>
+
+                  {!market.isSettled && (
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void onSettle(market.address, 1)}
+                        disabled={isBusy}
+                        className="rounded-xl bg-green-500/10 px-4 py-2 text-sm font-semibold text-green-700 transition hover:bg-green-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Settle Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onSettle(market.address, 2)}
+                        disabled={isBusy}
+                        className="rounded-xl bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Settle No
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onSettle(market.address, 3)}
+                        disabled={isBusy}
+                        className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Invalid
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </motion.div>
+    </section>
   )
 }
 
