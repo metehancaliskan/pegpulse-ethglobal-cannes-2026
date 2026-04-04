@@ -14,7 +14,7 @@ import {
   QrCode,
   RefreshCcw,
   ShieldAlert,
-  TrendingDown,
+  Landmark,
   X,
   Wallet2,
 } from 'lucide-react'
@@ -31,6 +31,7 @@ import {
 } from './lib/contracts'
 import type { MarketView } from './lib/contracts'
 import { getStableHealthScore, getStableQuotes, getStableRiskLabel } from './lib/cmc'
+import { getStablecoinTVL } from './lib/defillama'
 import { hasWalletConnectProjectId } from './lib/wallet'
 import eurcLogo from './assets/EURC-logo.png'
 import pegPulseLogo from './assets/pegpulse_logo.png'
@@ -50,7 +51,7 @@ type RiskCard = {
   riskLabel: string
   riskScore: number
   pegValue: string
-  threshold: string
+  tvl: string
   note: string
 }
 
@@ -60,7 +61,7 @@ const LANDING_RISK_CARDS: RiskCard[] = [
     riskLabel: 'Low Risk',
     riskScore: 18,
     pegValue: '$1.0002',
-    threshold: '$0.99',
+    tvl: 'Loading...',
     note: 'Deep liquidity and broad market usage keep short-term de-peg pressure contained.',
   },
   {
@@ -68,7 +69,7 @@ const LANDING_RISK_CARDS: RiskCard[] = [
     riskLabel: 'Moderate Watch',
     riskScore: 34,
     pegValue: 'EUR0.9988',
-    threshold: 'EUR0.97',
+    tvl: 'Loading...',
     note: 'Cross-currency liquidity remains thinner, so stress events deserve closer monitoring.',
   },
 ]
@@ -136,6 +137,13 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
     let cancelled = false
 
     const refreshRiskCards = async () => {
+      let tvlData: Awaited<ReturnType<typeof getStablecoinTVL>> | null = null
+      try {
+        tvlData = await getStablecoinTVL()
+      } catch (e) {
+        console.warn('TVL fetch failed:', e)
+      }
+
       try {
         const quotes = await getStableQuotes()
 
@@ -143,11 +151,11 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
           return
         }
 
-        setRiskCards([
+        setRiskCards((prev) => [
           {
             symbol: 'USDC',
             pegValue: `$${quotes.USDC.price.toFixed(4)}`,
-            threshold: '$0.99',
+            tvl: tvlData?.USDC?.formattedTVL ?? prev[0]?.tvl ?? 'N/A',
             riskScore: 100 - getStableHealthScore(quotes.USDC.price),
             riskLabel: getStableRiskLabel(quotes.USDC.price),
             note: `Live CMC price. 24h change ${quotes.USDC.percentChange24h.toFixed(2)}%.`,
@@ -155,7 +163,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
           {
             symbol: 'EURC',
             pegValue: `$${quotes.EURC.price.toFixed(4)}`,
-            threshold: '$0.97',
+            tvl: tvlData?.EURC?.formattedTVL ?? prev[1]?.tvl ?? 'N/A',
             riskScore: 100 - getStableHealthScore(quotes.EURC.price),
             riskLabel: getStableRiskLabel(quotes.EURC.price),
             note: `Live CMC price. 24h change ${quotes.EURC.percentChange24h.toFixed(2)}%.`,
@@ -164,6 +172,16 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
       } catch (error) {
         if (cancelled) {
           return
+        }
+
+        // Even if CMC fails, still update TVL if we got it
+        if (tvlData) {
+          setRiskCards((prev) =>
+            prev.map((card) => ({
+              ...card,
+              tvl: tvlData![card.symbol]?.formattedTVL ?? card.tvl,
+            })),
+          )
         }
 
         const message =
@@ -547,10 +565,10 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                         icon={<CircleDollarSign className="h-4 w-4" />}
                       />
                       <MetricCard
-                        label="Threshold"
-                        value={asset.threshold}
+                        label="TVL"
+                        value={asset.tvl}
                         accent="royal"
-                        icon={<TrendingDown className="h-4 w-4" />}
+                        icon={<Landmark className="h-4 w-4" />}
                       />
                       <MetricCard
                         label="Risk Score"
