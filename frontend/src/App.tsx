@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import Image from 'next/image'
+import Image, { type StaticImageData } from 'next/image'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -32,7 +32,9 @@ import {
 import type { MarketView } from './lib/contracts'
 import { getStableHealthScore, getStableQuotes, getStableRiskLabel } from './lib/cmc'
 import { hasWalletConnectProjectId } from './lib/wallet'
+import eurcLogo from './assets/EURC-logo.png'
 import pegPulseLogo from './assets/pegpulse_logo.png'
+import usdcLogo from './assets/USDC-logo.png'
 
 type AppMode = 'landing' | 'markets'
 
@@ -270,22 +272,15 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
           className="glass-card sticky top-4 z-30 flex flex-col gap-4 rounded-[28px] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-3">
-            <div className="relative h-20 w-[230px] shrink-0">
+            <div className="relative h-20 w-[200px] shrink-0 ml-1">
               <Image
                 src={pegPulseLogo}
                 alt="PegPulse logo"
-                className="h-full w-full object-contain"
+                className="h-full w-full object-contain object-left"
                 priority
                 fill
-                sizes="230px"
+                sizes="340px"
               />
-            </div>
-            <div>
-              {isMarketPage ? null : (
-                <p className="text-sm text-muted">
-                  Hedging stablecoin de-peg risk with real-time monitoring and onchain markets.
-                </p>
-              )}
             </div>
           </div>
 
@@ -296,11 +291,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                 onClick={isMarketPage ? goToLandingPage : goToMarketPage}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
               >
-                {isMarketPage ? (
-                  <ChevronLeft className="h-4 w-4" />
-                ) : (
-                  <ArrowRight className="h-4 w-4" />
-                )}
+                {isMarketPage && <ChevronLeft className="h-4 w-4" />}
                 {isMarketPage ? 'Overview' : 'Get Started'}
               </button>
               {isMarketPage ? (
@@ -484,7 +475,6 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                   className="glass-card rounded-[32px] bg-hero-grid p-8 sm:p-10"
                 >
                   <div className="max-w-2xl">
-                    <p className="panel-label">Stablecoin De-Peg Hedging</p>
                     <h2 className="mt-4 font-display text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
                       Hedge de-peg risk faster.
                     </h2>
@@ -536,9 +526,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-royal text-lg font-bold text-slate-950">
-                          {asset.symbol.slice(0, 1)}
-                        </div>
+                        <TokenBadge symbol={asset.symbol} size="lg" />
                         <div>
                           <h3 className="font-display text-2xl font-semibold text-slate-900">
                             {asset.symbol}
@@ -553,7 +541,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
 
                     <div className="mt-6 grid gap-4 sm:grid-cols-3">
                       <MetricCard
-                        label="Current Peg"
+                        label="Current Peg (24H)"
                         value={asset.pegValue}
                         accent="cyan"
                         icon={<CircleDollarSign className="h-4 w-4" />}
@@ -626,9 +614,7 @@ function MarketCard({
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-royal text-base font-bold text-slate-950">
-              {descriptor.symbol.slice(0, 1)}
-            </div>
+            <TokenBadge symbol={descriptor.symbol} size="md" />
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h4 className="font-display text-xl font-semibold text-slate-900">
@@ -731,6 +717,52 @@ function MarketCard({
         </div>
       </div>
     </motion.article>
+  )
+}
+
+function TokenBadge({
+  symbol,
+  size,
+}: {
+  symbol: string
+  size: 'md' | 'lg'
+}) {
+  const normalizedSymbol = symbol.toUpperCase()
+  const logoBySymbol: Record<string, StaticImageData> = {
+    USDC: usdcLogo,
+    EURC: eurcLogo,
+  }
+  const logoScaleBySymbol: Record<string, string> = {
+    USDC: 'scale-[1.0]',
+    EURC: 'scale-[1.02]',
+  }
+
+  const logo = logoBySymbol[normalizedSymbol]
+  const containerSize = size === 'lg' ? 'h-14 w-14 rounded-2xl' : 'h-12 w-12 rounded-2xl'
+  const imageSize = size === 'lg' ? 40 : 34
+
+  if (logo) {
+    return (
+      <div className={`flex items-center justify-center overflow-hidden bg-white ${containerSize}`}>
+        <Image
+          src={logo}
+          alt={`${symbol} logo`}
+          width={imageSize}
+          height={imageSize}
+          className={`h-full w-full object-contain ${logoScaleBySymbol[normalizedSymbol] ?? ''}`}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`flex items-center justify-center bg-cyan-royal font-bold text-slate-950 ${containerSize} ${
+        size === 'lg' ? 'text-lg' : 'text-base'
+      }`}
+    >
+      {symbol.slice(0, 1)}
+    </div>
   )
 }
 
