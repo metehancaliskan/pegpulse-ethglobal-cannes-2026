@@ -21,7 +21,7 @@ import {
   Settings,
   Wallet2,
 } from 'lucide-react'
-import { useAccount, useConnect, useDisconnect, useSwitchChain, useWalletClient } from 'wagmi'
+import { useAccount, useBalance, useConnect, useDisconnect, useSwitchChain, useWalletClient } from 'wagmi'
 import {
   ARC_NETWORK,
   createMarket,
@@ -98,6 +98,7 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
   const { address, chainId, isConnected } = useAccount()
   const { connectors, connectAsync, isPending: isConnecting } = useConnect()
   const { disconnect } = useDisconnect()
+  const { data: balanceData } = useBalance({ address, chainId: ARC_NETWORK.chainId })
   const { switchChainAsync } = useSwitchChain()
   const { data: walletClient } = useWalletClient()
 
@@ -106,6 +107,7 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
+  const [isWalletDropdownOpen, setIsWalletDropdownOpen] = useState(false)
   const [riskCards, setRiskCards] = useState<RiskCard[]>(LANDING_RISK_CARDS)
   const [statusMessage, setStatusMessage] = useState(
     'PegPulse is actively monitoring Arc markets for stablecoin de-peg stress.',
@@ -257,6 +259,8 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
   useEffect(() => {
     if (isConnected) {
       setIsConnectModalOpen(false)
+    } else {
+      setIsWalletDropdownOpen(false)
     }
   }, [isConnected])
 
@@ -353,13 +357,67 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-text">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-[-8rem] top-[-7rem] h-72 w-72 rounded-full bg-cyan/10 blur-3xl" />
-        <div className="absolute right-[-10rem] top-10 h-80 w-80 rounded-full bg-royal/10 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-cyan/5 blur-3xl" />
+      {/* SVG background */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <svg
+          className="absolute inset-0 h-full w-full"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden="true"
+        >
+          <defs>
+            {/* Dot grid pattern */}
+            <pattern id="dot-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+              <circle cx="1" cy="1" r="1" fill="currentColor" className="text-slate-300/40" />
+            </pattern>
+            {/* Radial fade mask so edges of the dot grid fade out */}
+            <radialGradient id="dot-fade" cx="50%" cy="40%" r="55%">
+              <stop offset="0%" stopColor="white" stopOpacity="1" />
+              <stop offset="100%" stopColor="white" stopOpacity="0" />
+            </radialGradient>
+            <mask id="dot-mask">
+              <rect width="100%" height="100%" fill="url(#dot-fade)" />
+            </mask>
+            {/* Cyan glow gradient */}
+            <radialGradient id="glow-cyan" cx="15%" cy="10%" r="40%">
+              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.12" />
+              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
+            </radialGradient>
+            {/* Royal blue glow gradient */}
+            <radialGradient id="glow-royal" cx="85%" cy="15%" r="40%">
+              <stop offset="0%" stopColor="#3b4ff0" stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#3b4ff0" stopOpacity="0" />
+            </radialGradient>
+            {/* Bottom accent */}
+            <radialGradient id="glow-bottom" cx="55%" cy="100%" r="35%">
+              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.07" />
+              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+
+          {/* Dot grid layer */}
+          <rect width="100%" height="100%" fill="url(#dot-grid)" mask="url(#dot-mask)" />
+
+          {/* Glow orbs */}
+          <rect width="100%" height="100%" fill="url(#glow-cyan)" />
+          <rect width="100%" height="100%" fill="url(#glow-royal)" />
+          <rect width="100%" height="100%" fill="url(#glow-bottom)" />
+
+          {/* Decorative arc lines — top-left */}
+          <g stroke="#06b6d4" strokeWidth="0.6" fill="none" opacity="0.18">
+            <ellipse cx="-60" cy="-60" rx="260" ry="260" />
+            <ellipse cx="-60" cy="-60" rx="340" ry="340" />
+            <ellipse cx="-60" cy="-60" rx="420" ry="420" />
+          </g>
+
+          {/* Decorative arc lines — bottom-right */}
+          <g stroke="#3b4ff0" strokeWidth="0.6" fill="none" opacity="0.12">
+            <ellipse cx="110%" cy="110%" rx="280" ry="280" />
+            <ellipse cx="110%" cy="110%" rx="380" ry="380" />
+          </g>
+        </svg>
       </div>
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 pb-12 pt-6 sm:px-6 lg:px-8">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-screen-2xl flex-col px-4 pb-12 pt-6 sm:px-6 lg:px-8">
         <motion.header
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -384,7 +442,7 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
                 <button
                   type="button"
                   onClick={goToLandingPage}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Overview
@@ -394,35 +452,65 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
                 <button
                   type="button"
                   onClick={isOwner ? goToAdminPage : goToMarketPage}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
+                  className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-5 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]"
                 >
                   Get Started
                 </button>
               )}
               {(isMarketPage || isAdminPage) ? (
-                <>
+                <div className="relative">
                   <button
                     type="button"
                     onClick={() => {
-                      if (isConnected) return
-                      setIsConnectModalOpen((current) => !current)
+                      if (isConnected) {
+                        setIsWalletDropdownOpen((prev) => !prev)
+                      } else {
+                        setIsConnectModalOpen(true)
+                      }
                     }}
-                    className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-5 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
+                    className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]"
                   >
-                    <Wallet2 className="h-4 w-4" />
-                    {address ? shortenAddress(address) : 'Connect Wallet'}
+                    <Wallet2 className="h-4 w-4 shrink-0" />
+                    {address ? (
+                      <span className="flex flex-col leading-tight">
+                        <span>{shortenAddress(address)}</span>
+                        {balanceData?.value !== undefined && (
+                          <span className="text-[11px] font-normal opacity-80">
+                            {formatAmount(balanceData.value)} USDC
+                          </span>
+                        )}
+                      </span>
+                    ) : 'Connect Wallet'}
                   </button>
-                  {isConnected ? (
-                    <button
-                      type="button"
-                      onClick={() => disconnect()}
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Disconnect
-                    </button>
-                  ) : null}
-                </>
+
+                  {isWalletDropdownOpen && isConnected && (
+                    <>
+                      {/* Backdrop */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsWalletDropdownOpen(false)}
+                      />
+                      {/* Dropdown */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-[20px] border border-slate-200/80 bg-white/95 shadow-xl backdrop-blur-xl"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            disconnect()
+                            setIsWalletDropdownOpen(false)
+                          }}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          Disconnect
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </div>
               ) : null}
             </div>
           </div>
@@ -465,7 +553,7 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
                     className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-4 text-left transition hover:border-cyan/30 hover:bg-cyan/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-royal text-slate-950">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-royal text-white">
                         {connector.id === 'walletConnect' ? (
                           <QrCode className="h-5 w-5" />
                         ) : (
@@ -616,7 +704,7 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
                       <button
                         type="button"
                         onClick={isOwner ? goToAdminPage : goToMarketPage}
-                        className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
+                        className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]"
                       >
                         Get Started
                         <ArrowRight className="h-4 w-4" />
@@ -776,7 +864,7 @@ function AdminPanel({
           <button
             type="button"
             onClick={onConnect}
-            className="mt-6 inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.02]"
           >
             <Wallet2 className="h-4 w-4" />
             Connect Wallet
@@ -851,7 +939,7 @@ function AdminPanel({
                 void onCreateMarket(description.trim())
                 setDescription('')
               }}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-royal px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-royal px-6 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
               Create Market
@@ -880,7 +968,7 @@ function AdminPanel({
                         #{index + 1}
                       </span>
                       <span
-                        className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${
+                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${
                           market.isSettled
                             ? 'border border-green-200 bg-green-50 text-green-700'
                             : 'border border-cyan/20 bg-cyan/10 text-cyan'
@@ -893,7 +981,7 @@ function AdminPanel({
                     <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted">
                       <span>Yes Pool: {formatAmount(market.totalWinBets)} USDC</span>
                       <span>No Pool: {formatAmount(market.totalLoseBets)} USDC</span>
-                      <span className="font-mono text-[10px]">{market.address}</span>
+                      <span className="font-mono text-xs">{market.address}</span>
                     </div>
                   </div>
 
@@ -1031,7 +1119,7 @@ function MarketGroupCard({ group, isOwner, isBusy, priceData, tvlData, onBet, on
       {/* Charts */}
       <div className="grid grid-cols-2 gap-px border-b border-slate-200/60 bg-slate-200/60">
         <div className="bg-white/95 px-5 py-4">
-          <p className="text-[10px] uppercase tracking-[0.22em] text-muted">Price (30d)</p>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">Price (30d)</p>
           <div className="mt-1 h-20">
             {priceData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -1044,19 +1132,19 @@ function MarketGroupCard({ group, isOwner, isBusy, priceData, tvlData, onBet, on
                   </defs>
                   <YAxis domain={['dataMin', 'dataMax']} hide />
                   <Tooltip
-                    contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '11px' }}
+                    contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '12px' }}
                     formatter={(value) => [`$${Number(value).toFixed(4)}`, 'Price']}
                   />
                   <Area type="monotone" dataKey="price" stroke="#0033AD" strokeWidth={1.5} fill={`url(#price-g-${group.symbol})`} />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-full items-center justify-center text-[11px] text-muted">Loading...</div>
+              <div className="flex h-full items-center justify-center text-xs text-muted">Loading...</div>
             )}
           </div>
         </div>
         <div className="bg-white/95 px-5 py-4">
-          <p className="text-[10px] uppercase tracking-[0.22em] text-muted">TVL (30d)</p>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">TVL (30d)</p>
           <div className="mt-1 h-20">
             {tvlData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -1069,7 +1157,7 @@ function MarketGroupCard({ group, isOwner, isBusy, priceData, tvlData, onBet, on
                   </defs>
                   <YAxis domain={['dataMin', 'dataMax']} hide />
                   <Tooltip
-                    contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '11px' }}
+                    contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '12px' }}
                     formatter={(value) => {
                       const v = Number(value)
                       if (v >= 1e9) return [`$${(v / 1e9).toFixed(2)}B`, 'TVL']
@@ -1081,7 +1169,7 @@ function MarketGroupCard({ group, isOwner, isBusy, priceData, tvlData, onBet, on
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-full items-center justify-center text-[11px] text-muted">Loading...</div>
+              <div className="flex h-full items-center justify-center text-xs text-muted">Loading...</div>
             )}
           </div>
         </div>
@@ -1105,7 +1193,7 @@ function MarketGroupCard({ group, isOwner, isBusy, priceData, tvlData, onBet, on
                 {/* Threshold label */}
                 <div className="w-28 shrink-0">
                   <p className="text-sm font-semibold text-slate-900">{tier.desc.thresholdLabel}</p>
-                  <p className="text-[11px] text-muted">{formatAmount(tier.pool)} Vol.</p>
+                  <p className="text-xs text-muted">{formatAmount(tier.pool)} Vol.</p>
                 </div>
 
                 {/* Probability bar */}
@@ -1433,11 +1521,11 @@ function MarketCard({
             {/* Pool info */}
             <div className="mt-3 grid grid-cols-2 gap-2 text-center">
               <div className="rounded-xl bg-emerald-50 px-2 py-1.5">
-                <p className="text-[10px] uppercase tracking-wider text-emerald-600">Yes Pool</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-emerald-600">Yes Pool</p>
                 <p className="text-xs font-semibold text-slate-900">{formatAmount(market.totalWinBets)}</p>
               </div>
               <div className="rounded-xl bg-rose-50 px-2 py-1.5">
-                <p className="text-[10px] uppercase tracking-wider text-rose-600">No Pool</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-rose-600">No Pool</p>
                 <p className="text-xs font-semibold text-slate-900">{formatAmount(market.totalLoseBets)}</p>
               </div>
             </div>
