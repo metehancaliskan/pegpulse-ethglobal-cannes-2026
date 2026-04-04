@@ -1,44 +1,40 @@
+'use client'
+
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
   Activity,
   ArrowRight,
+  ChevronLeft,
   CircleDollarSign,
   Clock3,
   LogOut,
-  Plus,
   QrCode,
   RefreshCcw,
   ShieldAlert,
-  Sparkles,
+  TrendingDown,
   X,
   Wallet2,
 } from 'lucide-react'
 import { useAccount, useConnect, useDisconnect, useSwitchChain, useWalletClient } from 'wagmi'
 import {
   ARC_NETWORK,
-  FACTORY_ADDRESS,
-  createMarket,
   fetchDashboardData,
-  formatEth,
+  formatAmount,
   outcomeLabel,
   placeBet,
   settleMarket,
   shortenAddress,
   withdrawWinnings,
 } from './lib/contracts'
-import { hasWalletConnectProjectId } from './lib/wallet'
 import type { MarketView } from './lib/contracts'
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
-import pegPulseLogo from './assets/pegpulse_logo.jpg'
+import { getStableHealthScore, getStableQuotes, getStableRiskLabel } from './lib/cmc'
+import { hasWalletConnectProjectId } from './lib/wallet'
+import pegPulseLogo from './assets/pegpulse_logo.png'
+
+type AppMode = 'landing' | 'markets'
 
 type MarketDescriptor = {
   symbol: string
@@ -47,34 +43,58 @@ type MarketDescriptor = {
   deadline: Date | null
 }
 
-const HEALTH_SERIES = [
-  { time: '00:00', peg: 1.002, liquidity: 92 },
-  { time: '04:00', peg: 0.999, liquidity: 88 },
-  { time: '08:00', peg: 1.001, liquidity: 94 },
-  { time: '12:00', peg: 0.997, liquidity: 76 },
-  { time: '16:00', peg: 1.0, liquidity: 82 },
-  { time: '20:00', peg: 0.998, liquidity: 79 },
-  { time: '24:00', peg: 1.001, liquidity: 91 },
-] as const
+type RiskCard = {
+  symbol: 'USDC' | 'EURC'
+  riskLabel: string
+  riskScore: number
+  pegValue: string
+  threshold: string
+  note: string
+}
 
-function App() {
+const LANDING_RISK_CARDS: RiskCard[] = [
+  {
+    symbol: 'USDC',
+    riskLabel: 'Low Risk',
+    riskScore: 18,
+    pegValue: '$1.0002',
+    threshold: '$0.99',
+    note: 'Deep liquidity and broad market usage keep short-term de-peg pressure contained.',
+  },
+  {
+    symbol: 'EURC',
+    riskLabel: 'Moderate Watch',
+    riskScore: 34,
+    pegValue: 'EUR0.9988',
+    threshold: 'EUR0.97',
+    note: 'Cross-currency liquidity remains thinner, so stress events deserve closer monitoring.',
+  },
+]
+
+type PegPulseAppProps = {
+  mode: AppMode
+}
+
+export default function PegPulseApp({ mode }: PegPulseAppProps) {
+  const router = useRouter()
   const { address, chainId, isConnected } = useAccount()
   const { connectors, connectAsync, isPending: isConnecting } = useConnect()
   const { disconnect } = useDisconnect()
   const { switchChainAsync } = useSwitchChain()
   const { data: walletClient } = useWalletClient()
+
   const [owner, setOwner] = useState<string>('')
   const [markets, setMarkets] = useState<MarketView[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false)
-  const [createValue, setCreateValue] = useState(
-    'Will USDC depeg below $0.99 before Apr 10 2026 18:00 UTC?',
-  )
+  const [riskCards, setRiskCards] = useState<RiskCard[]>(LANDING_RISK_CARDS)
   const [statusMessage, setStatusMessage] = useState(
-    'Dashboard is tracking the Arc Testnet deployment in real time.',
+    'PegPulse is actively monitoring Arc markets for stablecoin de-peg stress.',
   )
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  const isMarketPage = mode === 'markets'
 
   const refreshDashboard = useCallback(
     async (connectedAddress?: string | null, showSpinner = false) => {
@@ -107,9 +127,59 @@ function App() {
     }
 
     const intervalId = window.setInterval(refreshSilently, 25000)
-
     return () => window.clearInterval(intervalId)
   }, [address, refreshDashboard])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const refreshRiskCards = async () => {
+      try {
+        const quotes = await getStableQuotes()
+
+        if (cancelled) {
+          return
+        }
+
+        setRiskCards([
+          {
+            symbol: 'USDC',
+            pegValue: `$${quotes.USDC.price.toFixed(4)}`,
+            threshold: '$0.99',
+            riskScore: 100 - getStableHealthScore(quotes.USDC.price),
+            riskLabel: getStableRiskLabel(quotes.USDC.price),
+            note: `Live CMC price. 24h change ${quotes.USDC.percentChange24h.toFixed(2)}%.`,
+          },
+          {
+            symbol: 'EURC',
+            pegValue: `$${quotes.EURC.price.toFixed(4)}`,
+            threshold: '$0.97',
+            riskScore: 100 - getStableHealthScore(quotes.EURC.price),
+            riskLabel: getStableRiskLabel(quotes.EURC.price),
+            note: `Live CMC price. 24h change ${quotes.EURC.percentChange24h.toFixed(2)}%.`,
+          },
+        ])
+      } catch (error) {
+        if (cancelled) {
+          return
+        }
+
+        const message =
+          error instanceof Error ? error.message : 'Could not fetch CoinMarketCap prices.'
+        setStatusMessage(message)
+      }
+    }
+
+    void refreshRiskCards()
+    const intervalId = window.setInterval(() => {
+      void refreshRiskCards()
+    }, 5 * 60 * 1000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   useEffect(() => {
     if (isConnected) {
@@ -120,16 +190,11 @@ function App() {
   const isOwner =
     address !== undefined && owner !== '' && address.toLowerCase() === owner.toLowerCase()
 
-  const activeMarkets = markets.filter((market) => !market.isSettled)
+  const activeMarkets = useMemo(() => markets.filter((market) => !market.isSettled), [markets])
   const totalStaked = useMemo(
     () => markets.reduce((sum, market) => sum + market.totalWinBets + market.totalLoseBets, 0n),
     [markets],
   )
-  const totalYes = useMemo(
-    () => markets.reduce((sum, market) => sum + market.totalWinBets, 0n),
-    [markets],
-  )
-  const featuredDescriptor = getMarketDescriptor(markets[0]?.description ?? 'USDC monitor', 0)
 
   const executeAction = useCallback(
     async (label: string, action: (client: NonNullable<typeof walletClient>) => Promise<void>) => {
@@ -176,7 +241,7 @@ function App() {
       }
 
       if (connector.id === 'walletConnect' && !hasWalletConnectProjectId) {
-        throw new Error('Set VITE_WALLETCONNECT_PROJECT_ID in frontend/.env to enable WalletConnect.')
+        throw new Error('Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in frontend/.env to enable WalletConnect.')
       }
 
       await connectAsync({ connector })
@@ -187,25 +252,14 @@ function App() {
     }
   }
 
-  const handleCreateMarket = async () => {
-    const description = createValue.trim()
-
-    if (!description) {
-      setStatusMessage('Market description cannot be empty.')
-      return
-    }
-
-    await executeAction('Creating market', async (client) => {
-      await createMarket(client, description)
-      setCreateValue('')
-    })
-  }
+  const goToMarketPage = () => router.push('/markets')
+  const goToLandingPage = () => router.push('/')
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background text-text">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute left-[-8rem] top-[-7rem] h-72 w-72 rounded-full bg-cyan/10 blur-3xl" />
-        <div className="absolute right-[-10rem] top-20 h-80 w-80 rounded-full bg-royal/20 blur-3xl" />
+        <div className="absolute right-[-10rem] top-10 h-80 w-80 rounded-full bg-royal/10 blur-3xl" />
         <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-cyan/5 blur-3xl" />
       </div>
 
@@ -213,64 +267,73 @@ function App() {
         <motion.header
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-card flex flex-col gap-4 rounded-[28px] px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+          className="glass-card sticky top-4 z-30 flex flex-col gap-4 rounded-[28px] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
         >
-          <div className="flex items-center gap-4">
-            <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-[20px] border border-white/25 bg-white/95 shadow-[0_0_30px_rgba(0,245,255,0.12)]">
-              <img
+          <div className="flex items-center gap-3">
+            <div className="relative h-20 w-[230px] shrink-0">
+              <Image
                 src={pegPulseLogo}
                 alt="PegPulse logo"
-                className="h-full w-full scale-[1.16] object-cover"
+                className="h-full w-full object-contain"
+                priority
+                fill
+                sizes="230px"
               />
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="font-display text-2xl font-bold tracking-tight text-white">
-                  PegPulse
-                </h1>
-                <span className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan">
-                  Arc Network
-                </span>
-              </div>
-              <p className="mt-2 text-sm text-muted">
-                Stablecoin de-peg monitoring and onchain hedge execution.
-              </p>
+              {isMarketPage ? null : (
+                <p className="text-sm text-muted">
+                  Hedging stablecoin de-peg risk with real-time monitoring and onchain markets.
+                </p>
+              )}
             </div>
           </div>
 
           <div className="flex flex-col items-start gap-3 sm:items-end">
-            <div className="flex items-center gap-2 text-xs text-muted">
-              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-success shadow-[0_0_15px_rgba(34,197,94,0.6)]" />
-              Arc Testnet {ARC_NETWORK.chainId}
-            </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  if (isConnected) return
-                  setIsConnectModalOpen((current) => !current)
-                }}
-                className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-5 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
+                onClick={isMarketPage ? goToLandingPage : goToMarketPage}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
               >
-                <Wallet2 className="h-4 w-4" />
-                {address ? shortenAddress(address) : 'Connect Wallet'}
+                {isMarketPage ? (
+                  <ChevronLeft className="h-4 w-4" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+                {isMarketPage ? 'Overview' : 'Get Started'}
               </button>
-              {isConnected ? (
-                <button
-                  type="button"
-                  onClick={() => disconnect()}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition hover:border-cyan/30 hover:text-cyan"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Disconnect
-                </button>
+              {isMarketPage ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isConnected) return
+                      setIsConnectModalOpen((current) => !current)
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-5 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
+                  >
+                    <Wallet2 className="h-4 w-4" />
+                    {address ? shortenAddress(address) : 'Connect Wallet'}
+                  </button>
+                  {isConnected ? (
+                    <button
+                      type="button"
+                      onClick={() => disconnect()}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Disconnect
+                    </button>
+                  ) : null}
+                </>
               ) : null}
             </div>
           </div>
         </motion.header>
 
         {isConnectModalOpen ? (
-          <div className="fixed inset-0 z-40 flex items-start justify-center bg-slate-950/55 px-4 pt-24 backdrop-blur-sm">
+          <div className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/20 px-4 pt-24 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -279,17 +342,18 @@ function App() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="panel-label">Wallet Connection</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-white">
+                  <h3 className="mt-2 font-display text-2xl font-semibold text-slate-900">
                     Choose your wallet
                   </h3>
                   <p className="mt-2 text-sm leading-6 text-muted">
-                    Injected wallets connect directly. WalletConnect opens a QR flow for mobile and desktop wallets.
+                    Injected wallets connect directly. WalletConnect opens a QR flow for mobile and
+                    desktop wallets.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsConnectModalOpen(false)}
-                  className="rounded-full border border-white/10 bg-white/5 p-2 text-muted transition hover:text-white"
+                  className="rounded-full border border-slate-200/80 bg-white/80 p-2 text-muted transition hover:text-slate-900"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -302,7 +366,7 @@ function App() {
                     type="button"
                     onClick={() => void handleConnect(connector.id)}
                     disabled={isConnecting}
-                    className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-left transition hover:border-cyan/30 hover:bg-cyan/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-4 text-left transition hover:border-cyan/30 hover:bg-cyan/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-royal text-slate-950">
@@ -313,7 +377,7 @@ function App() {
                         )}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-white">{connector.name}</p>
+                        <p className="text-sm font-semibold text-slate-900">{connector.name}</p>
                         <p className="text-xs text-muted">
                           {connector.id === 'walletConnect'
                             ? 'Open QR modal and connect any compatible wallet.'
@@ -327,7 +391,8 @@ function App() {
 
                 {!hasWalletConnectProjectId ? (
                   <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                    WalletConnect is wired, but you still need to set `VITE_WALLETCONNECT_PROJECT_ID` in `frontend/.env`.
+                    WalletConnect is wired, but you still need to set
+                    ` NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ` in `frontend/.env`.
                   </div>
                 ) : null}
               </div>
@@ -335,269 +400,195 @@ function App() {
           </div>
         ) : null}
 
-        <main className="mt-6 grid gap-6">
-          <section>
-            <motion.article
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
-              className="glass-card w-full overflow-hidden rounded-[32px] border-white/10 bg-hero-grid p-6 sm:p-8"
-            >
-              <div className="grid gap-8 xl:grid-cols-[1.15fr_0.85fr]">
-                <div>
-                  <p className="panel-label">Stablecoin Health Monitor</p>
-                  <div className="mt-4 flex items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan/20 bg-cyan/10 text-xl font-bold text-cyan">
-                      {featuredDescriptor.symbol.slice(0, 1)}
-                    </div>
+        <main className="mt-6 grid gap-8">
+          <p className="sr-only">{statusMessage}</p>
+          {isMarketPage ? (
+            <>
+              <section className="grid gap-6">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                  className="glass-card rounded-[30px] p-6"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <h2 className="font-display text-3xl font-bold text-white sm:text-4xl">
-                        {featuredDescriptor.symbol} Liquidity Pulse
-                      </h2>
-                      <p className="mt-2 max-w-xl text-sm leading-6 text-muted sm:text-base">
-                        A premium hedge dashboard for monitoring stablecoin stress and taking
-                        directional protection through PegPulse markets.
+                      <p className="panel-label">Market Board</p>
+                      <h3 className="mt-2 font-display text-2xl font-semibold text-slate-900">
+                        Active hedge markets
+                      </h3>
+                      <p className="mt-2 text-sm text-muted">
+                        Connect your wallet and enter only the markets that are currently live.
                       </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => void refreshDashboard(address, true)}
+                      className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-sm text-slate-900 transition hover:border-cyan/30 hover:text-cyan"
+                    >
+                      <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </button>
                   </div>
 
-                  <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                    <MetricCard
-                      label="Factory"
-                      value={shortenAddress(FACTORY_ADDRESS)}
-                      accent="cyan"
-                      icon={<ShieldAlert className="h-4 w-4" />}
-                    />
-                    <MetricCard
-                      label="Active Markets"
-                      value={String(activeMarkets.length)}
-                      accent="royal"
-                      icon={<Activity className="h-4 w-4" />}
-                    />
-                    <MetricCard
-                      label="Total Staked"
-                      value={`${formatEth(totalStaked)} ETH`}
-                      accent="cyan"
-                      icon={<CircleDollarSign className="h-4 w-4" />}
-                    />
-                  </div>
-
-                  <div className="mt-8 h-[280px] rounded-[28px] border border-white/10 bg-slate-950/35 p-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={HEALTH_SERIES}>
-                        <defs>
-                          <linearGradient id="pegFill" x1="0" x2="0" y1="0" y2="1">
-                            <stop offset="0%" stopColor="#00F5FF" stopOpacity={0.55} />
-                            <stop offset="100%" stopColor="#0033AD" stopOpacity={0.02} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                        <XAxis dataKey="time" tick={{ fill: '#8FA8C7', fontSize: 12 }} />
-                        <YAxis
-                          yAxisId="left"
-                          domain={[0.994, 1.004]}
-                          tickFormatter={(value) => value.toFixed(3)}
-                          tick={{ fill: '#8FA8C7', fontSize: 12 }}
-                          width={56}
-                        />
-                        <YAxis
-                          yAxisId="right"
-                          orientation="right"
-                          domain={[60, 100]}
-                          tick={{ fill: '#64748B', fontSize: 12 }}
-                          width={42}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: 'rgba(6, 12, 24, 0.92)',
-                            border: '1px solid rgba(0,245,255,0.18)',
-                            borderRadius: '16px',
-                            color: '#E6F3FF',
-                          }}
-                        />
-                        <Area
-                          yAxisId="left"
-                          type="monotone"
-                          dataKey="peg"
-                          stroke="#00F5FF"
-                          strokeWidth={3}
-                          fill="url(#pegFill)"
-                        />
-                        <Area
-                          yAxisId="right"
-                          type="monotone"
-                          dataKey="liquidity"
-                          stroke="#60A5FA"
-                          strokeWidth={2}
-                          fillOpacity={0}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                <div className="grid gap-4">
-                  <div className="glass-card rounded-[28px] p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="panel-label">Alpha Agent</p>
-                      <div className="flex items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-success">
-                        <span className="inline-flex h-2.5 w-2.5 animate-pulse-soft rounded-full bg-success" />
-                        Live
+                  <div className="mt-6 grid gap-5">
+                    {isLoading ? (
+                      <div className="rounded-[26px] border border-slate-200/80 bg-white/80 px-5 py-10 text-center text-muted">
+                        Loading Arc markets...
                       </div>
-                    </div>
-                    <p className="mt-4 font-display text-xl font-semibold text-white">
-                      Monitoring Liquidity...
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-muted">
-                      PegPulse continuously watches Arc markets, liquidity pressure, and settlement
-                      readiness for de-peg hedges.
-                    </p>
-                    <div className="mt-6 grid gap-3">
-                      <InfoRow label="Watched Asset" value={featuredDescriptor.symbol} />
-                      <InfoRow label="Alert Threshold" value={featuredDescriptor.thresholdLabel} />
-                      <InfoRow label="Net Yes Pool" value={`${formatEth(totalYes)} ETH`} />
-                    </div>
+                    ) : activeMarkets.length === 0 ? (
+                      <div className="rounded-[26px] border border-dashed border-slate-200/80 bg-white/80 px-5 py-10 text-center text-muted">
+                        There are no active markets right now. Check back later for the next live
+                        hedge window.
+                      </div>
+                    ) : (
+                      activeMarkets.map((market, index) => (
+                        <MarketCard
+                          key={market.address}
+                          market={market}
+                          descriptor={getMarketDescriptor(market.description, index)}
+                          isOwner={isOwner}
+                          isBusy={actionLoading !== null}
+                          onBet={(side, amount) =>
+                            executeAction(
+                              side === 'win' ? 'Placing Yes bet' : 'Placing No bet',
+                              async (client) => {
+                                await placeBet(client, market.address, side, amount)
+                              },
+                            )
+                          }
+                          onSettle={(outcome) =>
+                            executeAction('Settling market', async (client) => {
+                              await settleMarket(client, market.address, outcome)
+                            })
+                          }
+                          onWithdraw={() =>
+                            executeAction('Withdrawing winnings', async (client) => {
+                              await withdrawWinnings(client, market.address)
+                            })
+                          }
+                        />
+                      ))
+                    )}
                   </div>
+                </motion.div>
+              </section>
+            </>
+          ) : (
+            <>
+              <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+                <motion.article
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                  className="glass-card rounded-[32px] bg-hero-grid p-8 sm:p-10"
+                >
+                  <div className="max-w-2xl">
+                    <p className="panel-label">Stablecoin De-Peg Hedging</p>
+                    <h2 className="mt-4 font-display text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+                      Hedge de-peg risk faster.
+                    </h2>
+                    <p className="mt-5 text-base leading-7 text-muted sm:text-lg">
+                      Track stablecoin stress and move into hedge markets with a clean execution
+                      flow.
+                    </p>
 
-                  <div className="glass-card rounded-[28px] p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="panel-label">Operator Controls</p>
-                      {isOwner ? (
-                        <span className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-cyan">
-                          Owner
-                        </span>
-                      ) : null}
-                    </div>
-
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-                      <p className="text-sm text-muted">
-                        {isOwner
-                          ? 'Create new de-peg markets directly from this panel.'
-                          : 'Connect the owner wallet to create and settle markets.'}
-                      </p>
-                      <textarea
-                        value={createValue}
-                        onChange={(event) => setCreateValue(event.target.value)}
-                        rows={4}
-                        placeholder="Will USDC depeg below $0.99 before Apr 10 2026 18:00 UTC?"
-                        className="mt-4 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-cyan/40"
-                      />
+                    <div className="mt-8 flex flex-wrap gap-3">
                       <button
                         type="button"
-                        onClick={() => void handleCreateMarket()}
-                        disabled={!isOwner || actionLoading === 'Creating market'}
-                        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-cyan-royal px-4 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={goToMarketPage}
+                        className="inline-flex items-center gap-2 rounded-full bg-cyan-royal px-6 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.02]"
                       >
-                        <Plus className="h-4 w-4" />
-                        {actionLoading === 'Creating market' ? 'Creating...' : 'Create Market'}
+                        Get Started
+                        <ArrowRight className="h-4 w-4" />
                       </button>
                     </div>
-
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-muted">
-                      <p className="font-medium text-white">Operator address</p>
-                      <p className="mt-2 break-all">{owner || 'Loading owner...'}</p>
-                    </div>
                   </div>
-                </div>
-              </div>
-            </motion.article>
-          </section>
+                </motion.article>
 
-          <section className="grid gap-6 lg:grid-cols-[1.55fr_0.45fr]">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="glass-card rounded-[30px] p-6"
-            >
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="panel-label">Prediction Markets</p>
-                  <h3 className="mt-2 font-display text-2xl font-semibold text-white">
-                    Active and settled hedge positions
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void refreshDashboard(address, true)}
-                  className="inline-flex items-center gap-2 self-start rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-cyan/30 hover:text-cyan"
+                <motion.aside
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="grid gap-4"
                 >
-                  <RefreshCcw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-              </div>
+                  <QuickStatCard
+                    label="Active Markets"
+                    value={String(activeMarkets.length)}
+                    icon={<Activity className="h-5 w-5" />}
+                  />
+                  <QuickStatCard
+                    label="Total Staked"
+                    value={`${formatAmount(totalStaked)} USDC`}
+                    icon={<CircleDollarSign className="h-5 w-5" />}
+                  />
+                </motion.aside>
+              </section>
 
-              <div className="mt-6 grid gap-5">
-                {isLoading ? (
-                  <div className="rounded-[26px] border border-white/10 bg-white/5 px-5 py-10 text-center text-muted">
-                    Loading Arc markets...
-                  </div>
-                ) : markets.length === 0 ? (
-                  <div className="rounded-[26px] border border-dashed border-white/10 bg-white/5 px-5 py-10 text-center text-muted">
-                    No markets created yet. Connect the owner wallet to open the first hedge market.
-                  </div>
-                ) : (
-                  markets.map((market, index) => (
-                    <MarketCard
-                      key={market.address}
-                      market={market}
-                      descriptor={getMarketDescriptor(market.description, index)}
-                      isOwner={isOwner}
-                      isBusy={actionLoading !== null}
-                      onBet={(side, amount) =>
-                        executeAction(side === 'win' ? 'Placing Yes bet' : 'Placing No bet', async (client) => {
-                          await placeBet(client, market.address, side, amount)
-                        })
-                      }
-                      onSettle={(outcome) =>
-                        executeAction('Settling market', async (client) => {
-                          await settleMarket(client, market.address, outcome)
-                        })
-                      }
-                      onWithdraw={() =>
-                        executeAction('Withdrawing winnings', async (client) => {
-                          await withdrawWinnings(client, market.address)
-                        })
-                      }
-                    />
-                  ))
-                )}
-              </div>
-            </motion.div>
-
-            <motion.aside
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="grid gap-6"
-            >
-              <div className="glass-card rounded-[30px] p-6">
-                <p className="panel-label">System Feed</p>
-                <p className="mt-3 font-display text-xl font-semibold text-white">
-                  Dark mode hedge cockpit
-                </p>
-                <p className="mt-3 text-sm leading-6 text-muted">{statusMessage}</p>
-                <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-                  <div className="flex items-center gap-3">
-                    <Sparkles className="h-5 w-5 text-cyan" />
-                    <div>
-                      <p className="text-sm font-medium text-white">Deployment target</p>
-                      <p className="text-xs text-muted">{ARC_NETWORK.blockExplorerUrl}</p>
+              <section className="grid gap-4 lg:grid-cols-2">
+                {riskCards.map((asset, index) => (
+                  <motion.article
+                    key={asset.symbol}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 + index * 0.05 }}
+                    className="glass-card rounded-[30px] p-6"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-royal text-lg font-bold text-slate-950">
+                          {asset.symbol.slice(0, 1)}
+                        </div>
+                        <div>
+                          <h3 className="font-display text-2xl font-semibold text-slate-900">
+                            {asset.symbol}
+                          </h3>
+                          <p className="text-sm text-muted">{asset.note}</p>
+                        </div>
+                      </div>
+                      <div className="rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cyan">
+                        {asset.riskLabel}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              <div className="glass-card rounded-[30px] p-6">
-                <p className="panel-label">How To Test</p>
-                <div className="mt-4 space-y-4 text-sm leading-6 text-muted">
-                  <StepRow text="Connect the owner wallet and create a market with a parseable date in the description." />
-                  <StepRow text="Open a second wallet, place Yes or No bets, and compare user stake values on each card." />
-                  <StepRow text="Settle from the owner wallet, then withdraw from the winning side." />
-                </div>
-              </div>
-            </motion.aside>
-          </section>
+                    <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                      <MetricCard
+                        label="Current Peg"
+                        value={asset.pegValue}
+                        accent="cyan"
+                        icon={<CircleDollarSign className="h-4 w-4" />}
+                      />
+                      <MetricCard
+                        label="Threshold"
+                        value={asset.threshold}
+                        accent="royal"
+                        icon={<TrendingDown className="h-4 w-4" />}
+                      />
+                      <MetricCard
+                        label="Risk Score"
+                        value={`${asset.riskScore}/100`}
+                        accent="cyan"
+                        icon={<ShieldAlert className="h-4 w-4" />}
+                      />
+                    </div>
+
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between text-sm text-muted">
+                        <span>De-peg probability monitor</span>
+                        <span>{asset.riskScore}%</span>
+                      </div>
+                      <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-cyan-royal transition-all"
+                          style={{ width: `${asset.riskScore}%` }}
+                        />
+                      </div>
+                    </div>
+                  </motion.article>
+                ))}
+              </section>
+            </>
+          )}
         </main>
       </div>
     </div>
@@ -630,7 +621,7 @@ function MarketCard({
   return (
     <motion.article
       layout
-      className="rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03))] p-5 shadow-glow backdrop-blur-xl"
+      className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(238,244,255,0.95))] p-5 shadow-glow backdrop-blur-xl"
     >
       <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div className="min-w-0 flex-1">
@@ -640,8 +631,10 @@ function MarketCard({
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h4 className="font-display text-xl font-semibold text-white">{descriptor.symbol}</h4>
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
+                <h4 className="font-display text-xl font-semibold text-slate-900">
+                  {descriptor.symbol}
+                </h4>
+                <span className="rounded-full border border-slate-200/80 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-muted">
                   {market.isSettled ? outcomeLabel(market.outcome) : 'Open'}
                 </span>
               </div>
@@ -651,25 +644,30 @@ function MarketCard({
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatPill label="De-peg Threshold" value={descriptor.thresholdLabel} />
-            <StatPill label="Time Remaining" value={timeRemaining} icon={<Clock3 className="h-4 w-4" />} />
-            <StatPill label="Total Stake" value={`${formatEth(totalPool)} ETH`} />
+            <StatPill label="Deadline" value={descriptor.deadlineLabel} />
             <StatPill
-              label="Your Exposure"
-              value={`${formatEth(market.userWinBet + market.userLoseBet)} ETH`}
+              label="Time Remaining"
+              value={timeRemaining}
+              icon={<Clock3 className="h-4 w-4" />}
             />
+            <StatPill label="Total Stake" value={`${formatAmount(totalPool)} USDC`} />
           </div>
         </div>
 
         <div className="w-full xl:max-w-sm">
-          <div className="rounded-[24px] border border-white/10 bg-slate-950/40 p-4">
+          <div className="rounded-[24px] border border-slate-200/80 bg-white/75 p-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-2xl border border-cyan/20 bg-cyan/10 p-4">
                 <p className="text-xs uppercase tracking-[0.22em] text-cyan/80">Yes Pool</p>
-                <p className="mt-2 text-lg font-semibold text-white">{formatEth(market.totalWinBets)} ETH</p>
+                <p className="mt-2 text-lg font-semibold text-slate-900">
+                  {formatAmount(market.totalWinBets)} USDC
+                </p>
               </div>
               <div className="rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-blue-200">No Pool</p>
-                <p className="mt-2 text-lg font-semibold text-white">{formatEth(market.totalLoseBets)} ETH</p>
+                <p className="text-xs uppercase tracking-[0.22em] text-blue-600">No Pool</p>
+                <p className="mt-2 text-lg font-semibold text-slate-900">
+                  {formatAmount(market.totalLoseBets)} USDC
+                </p>
               </div>
             </div>
 
@@ -679,8 +677,8 @@ function MarketCard({
               type="number"
               min="0"
               step="0.01"
-              className="mt-4 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan/40"
-              placeholder="Bet amount in ETH"
+              className="mt-4 w-full rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan/40"
+              placeholder="Bet amount in USDC"
             />
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -696,7 +694,7 @@ function MarketCard({
                 type="button"
                 onClick={() => void onBet('lose', amount)}
                 disabled={market.isSettled || isBusy}
-                className="rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-100 transition hover:border-blue-300/40 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:border-blue-300/40 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 No
               </button>
@@ -705,9 +703,21 @@ function MarketCard({
             <div className="mt-4 flex flex-wrap gap-2">
               {isOwner && !market.isSettled ? (
                 <>
-                  <MiniButton label="Settle Yes" onClick={() => void onSettle(1)} disabled={isBusy} />
-                  <MiniButton label="Settle No" onClick={() => void onSettle(2)} disabled={isBusy} />
-                  <MiniButton label="Invalid" onClick={() => void onSettle(3)} disabled={isBusy} />
+                  <MiniButton
+                    label="Settle Yes"
+                    onClick={() => void onSettle(1)}
+                    disabled={isBusy}
+                  />
+                  <MiniButton
+                    label="Settle No"
+                    onClick={() => void onSettle(2)}
+                    disabled={isBusy}
+                  />
+                  <MiniButton
+                    label="Invalid"
+                    onClick={() => void onSettle(3)}
+                    disabled={isBusy}
+                  />
                 </>
               ) : null}
 
@@ -721,6 +731,26 @@ function MarketCard({
         </div>
       </div>
     </motion.article>
+  )
+}
+
+function QuickStatCard({
+  label,
+  value,
+  icon,
+}: {
+  label: string
+  value: string
+  icon: ReactNode
+}) {
+  return (
+    <div className="glass-card rounded-[28px] p-5">
+      <div className="flex items-center justify-between text-xs uppercase tracking-[0.22em] text-muted">
+        <span>{label}</span>
+        <span className="text-cyan">{icon}</span>
+      </div>
+      <p className="mt-3 font-display text-2xl font-semibold text-slate-900">{value}</p>
+    </div>
   )
 }
 
@@ -745,18 +775,9 @@ function MetricCard({
     >
       <div className="flex items-center justify-between text-xs uppercase tracking-[0.22em] text-muted">
         <span>{label}</span>
-        <span className={accent === 'cyan' ? 'text-cyan' : 'text-blue-200'}>{icon}</span>
+        <span className={accent === 'cyan' ? 'text-cyan' : 'text-blue-600'}>{icon}</span>
       </div>
-      <p className="mt-3 text-xl font-semibold text-white">{value}</p>
-    </div>
-  )
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <span className="text-sm text-muted">{label}</span>
-      <span className="text-sm font-medium text-white">{value}</span>
+      <p className="mt-3 text-xl font-semibold text-slate-900">{value}</p>
     </div>
   )
 }
@@ -771,21 +792,12 @@ function StatPill({
   icon?: ReactNode
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+    <div className="rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3">
       <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted">
         {icon}
         <span>{label}</span>
       </div>
-      <p className="mt-2 text-sm font-semibold text-white sm:text-base">{value}</p>
-    </div>
-  )
-}
-
-function StepRow({ text }: { text: string }) {
-  return (
-    <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-cyan" />
-      <p>{text}</p>
+      <p className="mt-2 text-sm font-semibold text-slate-900 sm:text-base">{value}</p>
     </div>
   )
 }
@@ -804,7 +816,7 @@ function MiniButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-white transition hover:border-cyan/30 hover:text-cyan disabled:cursor-not-allowed disabled:opacity-50"
+      className="rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-900 transition hover:border-cyan/30 hover:text-cyan disabled:cursor-not-allowed disabled:opacity-50"
     >
       {label}
     </button>
@@ -812,18 +824,18 @@ function MiniButton({
 }
 
 function getMarketDescriptor(description: string, index: number): MarketDescriptor {
-  const stablecoinMatch = description.match(/\b(USDC|USDT|DAI|FDUSD|USDE|FRAX|PYUSD)\b/i)
+  const stablecoinMatch = description.match(/\b(USDC|USDT|DAI|FDUSD|USDE|FRAX|PYUSD|EURC)\b/i)
   const symbol = stablecoinMatch?.[1]?.toUpperCase() ?? `MKT-${index + 1}`
 
   const percentMatch = description.match(/(\d+(?:\.\d+)?)%/i)
-  const dollarMatch = description.match(/\$(\d+(?:\.\d+)?)/i)
+  const currencySymbolMatch = description.match(/\$|EUR/i)
+  const priceMatch = description.match(/(?:\$|EUR)(\d+(?:\.\d+)?)/i)
 
   let thresholdLabel = percentMatch ? `${percentMatch[1]}%` : '1%'
 
-  if (!percentMatch && dollarMatch) {
-    const price = Number(dollarMatch[1])
-    const threshold = Math.abs((1 - price) * 100)
-    thresholdLabel = `${threshold.toFixed(threshold % 1 === 0 ? 0 : 2)}%`
+  if (!percentMatch && currencySymbolMatch && priceMatch) {
+    const prefix = currencySymbolMatch[0] === '$' ? '$' : 'EUR'
+    thresholdLabel = `${prefix}${priceMatch[1]}`
   }
 
   const beforeMatch = description.match(/before\s+(.+?)(?:\?|$)/i)
@@ -872,5 +884,3 @@ function getTimeRemaining(deadline: Date | null) {
 
   return `${minutes}m`
 }
-
-export default App

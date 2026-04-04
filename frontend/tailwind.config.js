@@ -1,30 +1,30 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
-        background: '#0B0E14',
-        panel: '#101826',
-        'panel-soft': '#131d2d',
-        line: 'rgba(148, 163, 184, 0.14)',
+        background: '#F4F8FF',
+        panel: '#FFFFFF',
+        'panel-soft': '#EEF4FF',
+        line: 'rgba(15, 23, 42, 0.10)',
         cyan: '#00F5FF',
         royal: '#0033AD',
         success: '#22C55E',
-        text: '#E6F3FF',
-        muted: '#8FA8C7',
+        text: '#0F172A',
+        muted: '#5B6B84',
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],
         display: ['Sora', 'sans-serif'],
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(0, 245, 255, 0.14), 0 20px 60px rgba(0, 51, 173, 0.25)',
-        cyan: '0 0 40px rgba(0, 245, 255, 0.18)',
+        glow: '0 0 0 1px rgba(29, 78, 216, 0.08), 0 20px 60px rgba(15, 23, 42, 0.08)',
+        cyan: '0 0 30px rgba(0, 245, 255, 0.12)',
       },
       backgroundImage: {
         'hero-grid':
-          'radial-gradient(circle at top, rgba(0, 245, 255, 0.18), transparent 34%), radial-gradient(circle at 85% 15%, rgba(0, 51, 173, 0.24), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0))',
+          'radial-gradient(circle at top, rgba(0, 245, 255, 0.14), transparent 34%), radial-gradient(circle at 85% 15%, rgba(0, 51, 173, 0.12), transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.92), rgba(238,244,255,0.96))',
         'cyan-royal': 'linear-gradient(135deg, #00F5FF 0%, #0033AD 100%)',
       },
       keyframes: {

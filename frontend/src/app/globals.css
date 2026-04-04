@@ -6,13 +6,13 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
     font-family: Inter, sans-serif;
     background:
-      radial-gradient(circle at top, rgba(0, 245, 255, 0.1), transparent 32%),
-      radial-gradient(circle at 85% 10%, rgba(0, 51, 173, 0.16), transparent 18%),
-      #0b0e14;
-    color: #e6f3ff;
+      radial-gradient(circle at top, rgba(0, 245, 255, 0.08), transparent 32%),
+      radial-gradient(circle at 85% 10%, rgba(0, 51, 173, 0.08), transparent 18%),
+      #f4f8ff;
+    color: #0f172a;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -33,8 +33,8 @@
     min-height: 100vh;
     background:
       radial-gradient(circle at top, rgba(0, 245, 255, 0.08), transparent 28%),
-      radial-gradient(circle at 90% 12%, rgba(0, 51, 173, 0.18), transparent 22%),
-      linear-gradient(180deg, #08101d 0%, #0b0e14 100%);
+      radial-gradient(circle at 90% 12%, rgba(0, 51, 173, 0.10), transparent 22%),
+      linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
   }
 
   button,
@@ -42,15 +42,11 @@
   textarea {
     font: inherit;
   }
-
-  #root {
-    min-height: 100vh;
-  }
 }
 
 @layer components {
   .glass-card {
-    @apply border border-white/10 bg-white/5 shadow-glow backdrop-blur-xl;
+    @apply border border-slate-200/80 bg-white/75 shadow-glow backdrop-blur-xl;
   }
 
   .panel-label {

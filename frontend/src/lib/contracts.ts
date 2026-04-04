@@ -219,7 +219,7 @@ export async function withdrawWinnings(walletClient: WalletClient, marketAddress
   await publicClient.waitForTransactionReceipt({ hash })
 }
 
-export function formatEth(value: bigint) {
+export function formatAmount(value: bigint) {
   const formatted = Number(formatEther(value))
 
   if (formatted === 0) {
