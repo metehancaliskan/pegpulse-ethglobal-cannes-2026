@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sora:wght@400;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    font-family: Inter, sans-serif;
+    background:
+      radial-gradient(circle at top, rgba(0, 245, 255, 0.1), transparent 32%),
+      radial-gradient(circle at 85% 10%, rgba(0, 51, 173, 0.16), transparent 18%),
+      #0b0e14;
+    color: #e6f3ff;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top, rgba(0, 245, 255, 0.08), transparent 28%),
+      radial-gradient(circle at 90% 12%, rgba(0, 51, 173, 0.18), transparent 22%),
+      linear-gradient(180deg, #08101d 0%, #0b0e14 100%);
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply border border-white/10 bg-white/5 shadow-glow backdrop-blur-xl;
+  }
+
+  .panel-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.28em] text-cyan/80;
+  }
+}
