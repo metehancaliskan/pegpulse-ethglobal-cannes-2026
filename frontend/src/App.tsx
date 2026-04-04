@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Image, { type StaticImageData } from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts'
 import {
   Activity,
   ArrowRight,
@@ -71,18 +72,29 @@ const LANDING_RISK_CARDS: RiskCard[] = [
     symbol: 'EURC',
     riskLabel: 'Moderate Watch',
     riskScore: 34,
-    pegValue: 'EUR0.9988',
+    pegValue: '€0.9988',
     tvl: 'Loading...',
     note: 'Cross-currency liquidity remains thinner, so stress events deserve closer monitoring.',
   },
 ]
+
+type PricePoint = { time: string; price: number }
 
 type PegPulseAppProps = {
   mode: AppMode
 }
 
 export default function PegPulseApp({ mode }: PegPulseAppProps) {
+  return (
+    <Suspense>
+      <PegPulseInner mode={mode} />
+    </Suspense>
+  )
+}
+
+function PegPulseInner({ mode }: PegPulseAppProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { address, chainId, isConnected } = useAccount()
   const { connectors, connectAsync, isPending: isConnecting } = useConnect()
   const { disconnect } = useDisconnect()
@@ -99,6 +111,10 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
     'PegPulse is actively monitoring Arc markets for stablecoin de-peg stress.',
   )
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [priceCharts, setPriceCharts] = useState<Record<string, PricePoint[]>>({})
+  const [symbolFilter, setSymbolFilter] = useState<string | null>(
+    searchParams.get('symbol'),
+  )
 
   const isMarketPage = mode === 'markets'
   const isAdminPage = mode === 'admin'
@@ -166,7 +182,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
           },
           {
             symbol: 'EURC',
-            pegValue: `$${quotes.EURC.price.toFixed(4)}`,
+            pegValue: `€${quotes.EURC.price.toFixed(4)}`,
             tvl: tvlData?.EURC?.formattedTVL ?? prev[1]?.tvl ?? 'N/A',
             riskScore: 100 - getStableHealthScore(quotes.EURC.price),
             riskLabel: getStableRiskLabel(quotes.EURC.price),
@@ -206,6 +222,30 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
+    async function fetchCharts() {
+      try {
+        const [usdcRes, eurcRes] = await Promise.all([
+          fetch('/api/price-chart?symbol=USDC'),
+          fetch('/api/price-chart?symbol=EURC'),
+        ])
+        if (cancelled) return
+        const [usdc, eurc] = await Promise.all([usdcRes.json(), eurcRes.json()])
+        setPriceCharts({
+          USDC: usdc.points ?? [],
+          EURC: eurc.points ?? [],
+        })
+      } catch (e) {
+        console.warn('Price chart fetch failed:', e)
+      }
+    }
+
+    void fetchCharts()
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
     if (isConnected) {
       setIsConnectModalOpen(false)
     }
@@ -214,7 +254,13 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
   const isOwner =
     address !== undefined && owner !== '' && address.toLowerCase() === owner.toLowerCase()
 
-  const activeMarkets = useMemo(() => markets.filter((market) => !market.isSettled), [markets])
+  const activeMarkets = useMemo(() => {
+    const open = markets.filter((market) => !market.isSettled)
+    if (!symbolFilter) return open
+    return open.filter((market) =>
+      market.description.toUpperCase().includes(symbolFilter.toUpperCase()),
+    )
+  }, [markets, symbolFilter])
   const totalStaked = useMemo(
     () => markets.reduce((sum, market) => sum + market.totalWinBets + market.totalLoseBets, 0n),
     [markets],
@@ -295,7 +341,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
           className="glass-card sticky top-4 z-30 flex flex-col gap-4 rounded-[28px] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div className="flex items-center gap-3">
-            <div className="relative h-20 w-[200px] shrink-0 ml-1">
+            <button type="button" onClick={goToLandingPage} className="relative h-20 w-[200px] shrink-0 ml-1 cursor-pointer">
               <Image
                 src={pegPulseLogo}
                 alt="PegPulse logo"
@@ -304,7 +350,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                 fill
                 sizes="340px"
               />
-            </div>
+            </button>
           </div>
 
           <div className="flex flex-col items-start gap-3 sm:items-end">
@@ -456,9 +502,28 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                   transition={{ delay: 0.05 }}
                   className="glass-card rounded-[30px] p-6"
                 >
-                  <h3 className="font-display text-2xl font-semibold text-slate-900">
-                    Active hedge markets
-                  </h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-display text-2xl font-semibold text-slate-900">
+                      Active hedge markets
+                    </h3>
+                    {symbolFilter && (
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-cyan/20 bg-cyan/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-cyan">
+                          {symbolFilter}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSymbolFilter(null)
+                            router.replace('/markets')
+                          }}
+                          className="rounded-full border border-slate-200/80 bg-white/80 p-1 text-muted transition hover:text-slate-900"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="mt-6 grid gap-5">
                     {isLoading ? (
@@ -560,7 +625,8 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.12 + index * 0.05 }}
-                    className="glass-card rounded-[30px] p-6"
+                    onClick={() => router.push(`/markets?symbol=${asset.symbol}`)}
+                    className="glass-card cursor-pointer rounded-[30px] p-6 transition-all hover:scale-[1.02] hover:border-cyan/40 hover:shadow-lg"
                   >
                     <div className="flex items-center gap-4">
                       <TokenBadge symbol={asset.symbol} size="lg" />
@@ -571,7 +637,7 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
 
                     <div className="mt-6 grid gap-4 sm:grid-cols-3">
                       <MetricCard
-                        label="Current Peg (24H)"
+                        label="Current Peg"
                         value={asset.pegValue}
                         accent="cyan"
                         icon={<CircleDollarSign className="h-4 w-4" />}
@@ -591,15 +657,43 @@ export default function PegPulseApp({ mode }: PegPulseAppProps) {
                     </div>
 
                     <div className="mt-6">
-                      <div className="flex items-center justify-between text-sm text-muted">
-                        <span>De-peg probability monitor</span>
-                        <span>{asset.riskScore}%</span>
-                      </div>
-                      <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200">
-                        <div
-                          className="h-full rounded-full bg-cyan-royal transition-all"
-                          style={{ width: `${asset.riskScore}%` }}
-                        />
+                      <p className="mb-2 text-xs uppercase tracking-[0.22em] text-muted">
+                        Price (30d)
+                      </p>
+                      <div className="h-24">
+                        {(priceCharts[asset.symbol]?.length ?? 0) > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={priceCharts[asset.symbol]}>
+                              <defs>
+                                <linearGradient id={`grad-${asset.symbol}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#00F5FF" stopOpacity={0.3} />
+                                  <stop offset="100%" stopColor="#00F5FF" stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <YAxis domain={['dataMin', 'dataMax']} hide />
+                              <Tooltip
+                                contentStyle={{
+                                  background: 'white',
+                                  border: '1px solid #e2e8f0',
+                                  borderRadius: '12px',
+                                  fontSize: '12px',
+                                }}
+                                formatter={(value) => [`$${Number(value).toFixed(4)}`, 'Price']}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="price"
+                                stroke="#0033AD"
+                                strokeWidth={2}
+                                fill={`url(#grad-${asset.symbol})`}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-muted">
+                            Loading chart...
+                          </div>
+                        )}
                       </div>
                     </div>
                   </motion.article>
@@ -835,8 +929,45 @@ function MarketCard({
   onWithdraw,
 }: MarketCardProps) {
   const [amount, setAmount] = useState('0.05')
+  const [selectedSide, setSelectedSide] = useState<'win' | 'lose'>('win')
   const timeRemaining = getTimeRemaining(descriptor.deadline)
   const totalPool = market.totalWinBets + market.totalLoseBets
+
+  const FEE_BPS = 1000n // 1/1000 = 0.1%
+  const amountWei = (() => {
+    try {
+      const parsed = parseFloat(amount)
+      if (isNaN(parsed) || parsed <= 0) return 0n
+      return BigInt(Math.floor(parsed * 1e18))
+    } catch {
+      return 0n
+    }
+  })()
+  const afterFee = amountWei - amountWei / FEE_BPS
+
+  // Implied prices (what 1 share costs)
+  const yesPrice = totalPool > 0n ? Number(market.totalWinBets) / Number(totalPool) : 0.5
+  const noPrice = totalPool > 0n ? Number(market.totalLoseBets) / Number(totalPool) : 0.5
+
+  // Potential payout calculation
+  const potentialPayout = (() => {
+    if (afterFee <= 0n) return 0
+
+    if (selectedSide === 'win') {
+      const newYesPool = market.totalWinBets + afterFee
+      const newTotal = totalPool + afterFee
+      return Number(newTotal) * Number(afterFee) / Number(newYesPool) / 1e18
+    } else {
+      const newNoPool = market.totalLoseBets + afterFee
+      const newTotal = totalPool + afterFee
+      return Number(newTotal) * Number(afterFee) / Number(newNoPool) / 1e18
+    }
+  })()
+
+  const betAmountNum = parseFloat(amount) || 0
+  const profit = potentialPayout - betAmountNum
+
+  const QUICK_AMOUNTS = ['0.01', '0.05', '0.1', '0.5', '1']
 
   return (
     <motion.article
@@ -874,71 +1005,113 @@ function MarketCard({
 
         <div className="w-full xl:max-w-sm">
           <div className="rounded-[24px] border border-slate-200/80 bg-white/75 p-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-cyan/20 bg-cyan/10 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-cyan/80">Yes Pool</p>
-                <p className="mt-2 text-lg font-semibold text-slate-900">
-                  {formatAmount(market.totalWinBets)} USDC
-                </p>
-              </div>
-              <div className="rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-blue-600">No Pool</p>
-                <p className="mt-2 text-lg font-semibold text-slate-900">
-                  {formatAmount(market.totalLoseBets)} USDC
-                </p>
-              </div>
-            </div>
-
-            <input
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              type="number"
-              min="0"
-              step="0.01"
-              className="mt-4 w-full rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan/40"
-              placeholder="Bet amount in USDC"
-            />
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {/* Yes / No side selector with implied prices */}
+            <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => void onBet('win', amount)}
-                disabled={market.isSettled || isBusy}
-                className="rounded-2xl bg-cyan-royal px-4 py-3 text-sm font-semibold text-slate-950 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setSelectedSide('win')}
+                className={`rounded-2xl px-4 py-3 text-center text-sm font-semibold transition ${
+                  selectedSide === 'win'
+                    ? 'bg-emerald-500 text-white shadow-md'
+                    : 'border border-slate-200/80 bg-white/80 text-slate-600 hover:border-emerald-300'
+                }`}
               >
-                Yes
+                Yes {(yesPrice * 100).toFixed(0)}¢
               </button>
               <button
                 type="button"
-                onClick={() => void onBet('lose', amount)}
-                disabled={market.isSettled || isBusy}
-                className="rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-700 transition hover:border-blue-300/40 hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => setSelectedSide('lose')}
+                className={`rounded-2xl px-4 py-3 text-center text-sm font-semibold transition ${
+                  selectedSide === 'lose'
+                    ? 'bg-rose-500 text-white shadow-md'
+                    : 'border border-slate-200/80 bg-white/80 text-slate-600 hover:border-rose-300'
+                }`}
               >
-                No
+                No {(noPrice * 100).toFixed(0)}¢
               </button>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            {/* Amount input */}
+            <div className="mt-4">
+              <label className="text-xs font-medium text-muted">Amount</label>
+              <input
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                type="number"
+                min="0"
+                step="0.01"
+                className="mt-1 w-full rounded-2xl border border-slate-200/80 bg-white px-4 py-3 text-lg font-semibold text-slate-900 outline-none transition focus:border-cyan/40"
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* Quick amount buttons */}
+            <div className="mt-3 flex gap-2">
+              {QUICK_AMOUNTS.map((qa) => (
+                <button
+                  key={qa}
+                  type="button"
+                  onClick={() => setAmount(qa)}
+                  className="flex-1 rounded-xl border border-slate-200/80 bg-white/80 py-1.5 text-xs font-medium text-slate-600 transition hover:border-cyan/30 hover:text-cyan"
+                >
+                  +{qa}
+                </button>
+              ))}
+            </div>
+
+            {/* Payout preview */}
+            {betAmountNum > 0 && (
+              <div className="mt-4 rounded-2xl border border-slate-200/60 bg-slate-50/80 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted">To win</span>
+                  <span className="text-lg font-bold text-emerald-600">
+                    {potentialPayout.toFixed(4)} USDC
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-xs text-muted">Profit</span>
+                  <span className={`text-sm font-semibold ${profit > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                    +{profit.toFixed(4)} USDC ({betAmountNum > 0 ? ((profit / betAmountNum) * 100).toFixed(0) : 0}%)
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Trade button */}
+            <button
+              type="button"
+              onClick={() => void onBet(selectedSide, amount)}
+              disabled={market.isSettled || isBusy || betAmountNum <= 0}
+              className={`mt-4 w-full rounded-2xl px-4 py-3.5 text-sm font-semibold transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 ${
+                selectedSide === 'win'
+                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                  : 'bg-rose-500 text-white hover:bg-rose-600'
+              }`}
+            >
+              {selectedSide === 'win' ? 'Buy Yes' : 'Buy No'}
+            </button>
+
+            {/* Pool info */}
+            <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-xl bg-emerald-50 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-emerald-600">Yes Pool</p>
+                <p className="text-xs font-semibold text-slate-900">{formatAmount(market.totalWinBets)}</p>
+              </div>
+              <div className="rounded-xl bg-rose-50 px-2 py-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-rose-600">No Pool</p>
+                <p className="text-xs font-semibold text-slate-900">{formatAmount(market.totalLoseBets)}</p>
+              </div>
+            </div>
+
+            {/* Admin settle / Withdraw */}
+            <div className="mt-3 flex flex-wrap gap-2">
               {isOwner && !market.isSettled ? (
                 <>
-                  <MiniButton
-                    label="Settle Yes"
-                    onClick={() => void onSettle(1)}
-                    disabled={isBusy}
-                  />
-                  <MiniButton
-                    label="Settle No"
-                    onClick={() => void onSettle(2)}
-                    disabled={isBusy}
-                  />
-                  <MiniButton
-                    label="Invalid"
-                    onClick={() => void onSettle(3)}
-                    disabled={isBusy}
-                  />
+                  <MiniButton label="Settle Yes" onClick={() => void onSettle(1)} disabled={isBusy} />
+                  <MiniButton label="Settle No" onClick={() => void onSettle(2)} disabled={isBusy} />
+                  <MiniButton label="Invalid" onClick={() => void onSettle(3)} disabled={isBusy} />
                 </>
               ) : null}
-
               <MiniButton
                 label="Withdraw"
                 onClick={() => void onWithdraw()}
