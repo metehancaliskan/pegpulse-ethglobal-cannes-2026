@@ -112,6 +112,7 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
   )
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [priceCharts, setPriceCharts] = useState<Record<string, PricePoint[]>>({})
+  const [tvlCharts, setTvlCharts] = useState<Record<string, { time: string; tvl: number; tvlFormatted: string }[]>>({})
   const [symbolFilter, setSymbolFilter] = useState<string | null>(
     searchParams.get('symbol'),
   )
@@ -226,18 +227,26 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
 
     async function fetchCharts() {
       try {
-        const [usdcRes, eurcRes] = await Promise.all([
+        const [usdcPrice, eurcPrice, usdcTvl, eurcTvl] = await Promise.all([
           fetch('/api/price-chart?symbol=USDC'),
           fetch('/api/price-chart?symbol=EURC'),
+          fetch('/api/tvl-chart?symbol=USDC'),
+          fetch('/api/tvl-chart?symbol=EURC'),
         ])
         if (cancelled) return
-        const [usdc, eurc] = await Promise.all([usdcRes.json(), eurcRes.json()])
+        const [usdcP, eurcP, usdcT, eurcT] = await Promise.all([
+          usdcPrice.json(), eurcPrice.json(), usdcTvl.json(), eurcTvl.json(),
+        ])
         setPriceCharts({
-          USDC: usdc.points ?? [],
-          EURC: eurc.points ?? [],
+          USDC: usdcP.points ?? [],
+          EURC: eurcP.points ?? [],
+        })
+        setTvlCharts({
+          USDC: usdcT.points ?? [],
+          EURC: eurcT.points ?? [],
         })
       } catch (e) {
-        console.warn('Price chart fetch failed:', e)
+        console.warn('Chart fetch failed:', e)
       }
     }
 
@@ -261,6 +270,22 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
       market.description.toUpperCase().includes(symbolFilter.toUpperCase()),
     )
   }, [markets, symbolFilter])
+
+  // Group markets by symbol + deadline + question type for Polymarket-style UI
+  const groupedMarkets = useMemo(() => {
+    const groups: Record<string, { symbol: string; deadline: string; questionType: string; markets: MarketView[] }> = {}
+    for (const market of activeMarkets) {
+      const desc = getMarketDescriptor(market.description, 0)
+      const descUpper = market.description.toUpperCase()
+      const questionType = descUpper.includes('TVL') ? 'tvl' : descUpper.includes('DEPEG') || descUpper.includes('PEG') ? 'depeg' : 'other'
+      const key = `${desc.symbol}::${desc.deadlineLabel}::${questionType}`
+      if (!groups[key]) {
+        groups[key] = { symbol: desc.symbol, deadline: desc.deadlineLabel, questionType, markets: [] }
+      }
+      groups[key].markets.push(market)
+    }
+    return Object.values(groups)
+  }, [activeMarkets])
   const totalStaked = useMemo(
     () => markets.reduce((sum, market) => sum + market.totalWinBets + market.totalLoseBets, 0n),
     [markets],
@@ -530,35 +555,36 @@ function PegPulseInner({ mode }: PegPulseAppProps) {
                       <div className="rounded-[26px] border border-slate-200/80 bg-white/80 px-5 py-10 text-center text-muted">
                         Loading Arc markets...
                       </div>
-                    ) : activeMarkets.length === 0 ? (
+                    ) : groupedMarkets.length === 0 ? (
                       <div className="rounded-[26px] border border-dashed border-slate-200/80 bg-white/80 px-5 py-10 text-center text-muted">
                         There are no active markets right now. Check back later for the next live
                         hedge window.
                       </div>
                     ) : (
-                      activeMarkets.map((market, index) => (
-                        <MarketCard
-                          key={market.address}
-                          market={market}
-                          descriptor={getMarketDescriptor(market.description, index)}
+                      groupedMarkets.map((group) => (
+                        <MarketGroupCard
+                          key={`${group.symbol}::${group.deadline}::${group.questionType}`}
+                          group={group}
                           isOwner={isOwner}
                           isBusy={actionLoading !== null}
-                          onBet={(side, amount) =>
+                          priceData={priceCharts[group.symbol] ?? []}
+                          tvlData={tvlCharts[group.symbol] ?? []}
+                          onBet={(marketAddress, side, amount) =>
                             executeAction(
                               side === 'win' ? 'Placing Yes bet' : 'Placing No bet',
                               async (client) => {
-                                await placeBet(client, market.address, side, amount)
+                                await placeBet(client, marketAddress, side, amount)
                               },
                             )
                           }
-                          onSettle={(outcome) =>
+                          onSettle={(marketAddress, outcome) =>
                             executeAction('Settling market', async (client) => {
-                              await settleMarket(client, market.address, outcome)
+                              await settleMarket(client, marketAddress, outcome)
                             })
                           }
-                          onWithdraw={() =>
+                          onWithdraw={(marketAddress) =>
                             executeAction('Withdrawing winnings', async (client) => {
-                              await withdrawWinnings(client, market.address)
+                              await withdrawWinnings(client, marketAddress)
                             })
                           }
                         />
@@ -906,6 +932,319 @@ function AdminPanel({
         </div>
       </motion.div>
     </section>
+  )
+}
+
+type MarketGroup = {
+  symbol: string
+  deadline: string
+  questionType: string
+  markets: MarketView[]
+}
+
+type TvlPoint = { time: string; tvl: number; tvlFormatted: string }
+
+type MarketGroupCardProps = {
+  group: MarketGroup
+  isOwner: boolean
+  isBusy: boolean
+  priceData: PricePoint[]
+  tvlData: TvlPoint[]
+  onBet: (marketAddress: string, side: 'win' | 'lose', amount: string) => Promise<void>
+  onSettle: (marketAddress: string, outcome: 1 | 2 | 3) => Promise<void>
+  onWithdraw: (marketAddress: string) => Promise<void>
+}
+
+function MarketGroupCard({ group, isOwner, isBusy, priceData, tvlData, onBet, onSettle, onWithdraw }: MarketGroupCardProps) {
+  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [amount, setAmount] = useState('0.05')
+  const [selectedSide, setSelectedSide] = useState<'win' | 'lose'>('win')
+
+  const tiers = group.markets.map((market, i) => {
+    const desc = getMarketDescriptor(market.description, i)
+    const pool = market.totalWinBets + market.totalLoseBets
+    const yesPrice = pool > 0n ? Number(market.totalWinBets) / Number(pool) : 0.5
+    const noPrice = pool > 0n ? Number(market.totalLoseBets) / Number(pool) : 0.5
+    return { market, desc, pool, yesPrice, noPrice }
+  })
+
+  const selected = tiers[selectedIndex]
+  if (!selected) return null
+
+  const totalVolume = tiers.reduce((sum, t) => sum + t.pool, 0n)
+
+  const FEE_BPS = 1000n
+  const amountWei = (() => {
+    try {
+      const parsed = parseFloat(amount)
+      if (isNaN(parsed) || parsed <= 0) return 0n
+      return BigInt(Math.floor(parsed * 1e18))
+    } catch {
+      return 0n
+    }
+  })()
+  const afterFee = amountWei - amountWei / FEE_BPS
+
+  const potentialPayout = (() => {
+    if (afterFee <= 0n) return 0
+    if (selectedSide === 'win') {
+      const newPool = selected.market.totalWinBets + afterFee
+      const newTotal = selected.pool + afterFee
+      return Number(newTotal) * Number(afterFee) / Number(newPool) / 1e18
+    } else {
+      const newPool = selected.market.totalLoseBets + afterFee
+      const newTotal = selected.pool + afterFee
+      return Number(newTotal) * Number(afterFee) / Number(newPool) / 1e18
+    }
+  })()
+
+  const betAmountNum = parseFloat(amount) || 0
+  const profit = potentialPayout - betAmountNum
+  const QUICK_AMOUNTS = ['0.01', '0.05', '0.1', '0.5', '1']
+
+  return (
+    <motion.article
+      layout
+      className="rounded-[28px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.95),rgba(238,244,255,0.95))] shadow-glow backdrop-blur-xl overflow-hidden"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-200/60 px-6 py-4">
+        <div className="flex items-center gap-3">
+          <TokenBadge symbol={group.symbol} size="md" />
+          <div>
+            <h4 className="font-display text-xl font-semibold text-slate-900">
+              {group.symbol} {group.questionType === 'tvl' ? 'TVL' : 'De-peg'} Markets
+            </h4>
+            <p className="text-sm text-muted">
+              {group.questionType === 'tvl'
+                ? `Will ${group.symbol} TVL drop before ${group.deadline}?`
+                : `Will ${group.symbol} lose its peg before ${group.deadline}?`}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs uppercase tracking-[0.22em] text-muted">Total Volume</p>
+          <p className="text-lg font-semibold text-slate-900">{formatAmount(totalVolume)} USDC</p>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-2 gap-px border-b border-slate-200/60 bg-slate-200/60">
+        <div className="bg-white/95 px-5 py-4">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-muted">Price (30d)</p>
+          <div className="mt-1 h-20">
+            {priceData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={priceData}>
+                  <defs>
+                    <linearGradient id={`price-g-${group.symbol}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0033AD" stopOpacity={0.15} />
+                      <stop offset="100%" stopColor="#0033AD" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <YAxis domain={['dataMin', 'dataMax']} hide />
+                  <Tooltip
+                    contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '11px' }}
+                    formatter={(value) => [`$${Number(value).toFixed(4)}`, 'Price']}
+                  />
+                  <Area type="monotone" dataKey="price" stroke="#0033AD" strokeWidth={1.5} fill={`url(#price-g-${group.symbol})`} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-[11px] text-muted">Loading...</div>
+            )}
+          </div>
+        </div>
+        <div className="bg-white/95 px-5 py-4">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-muted">TVL (30d)</p>
+          <div className="mt-1 h-20">
+            {tvlData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={tvlData}>
+                  <defs>
+                    <linearGradient id={`tvl-g-${group.symbol}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00F5FF" stopOpacity={0.2} />
+                      <stop offset="100%" stopColor="#00F5FF" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <YAxis domain={['dataMin', 'dataMax']} hide />
+                  <Tooltip
+                    contentStyle={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '11px' }}
+                    formatter={(value) => {
+                      const v = Number(value)
+                      if (v >= 1e9) return [`$${(v / 1e9).toFixed(2)}B`, 'TVL']
+                      if (v >= 1e6) return [`$${(v / 1e6).toFixed(1)}M`, 'TVL']
+                      return [`$${v.toLocaleString()}`, 'TVL']
+                    }}
+                  />
+                  <Area type="monotone" dataKey="tvl" stroke="#0891B2" strokeWidth={1.5} fill={`url(#tvl-g-${group.symbol})`} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-[11px] text-muted">Loading...</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col xl:flex-row">
+        {/* Left: Tier list */}
+        <div className="flex-1 divide-y divide-slate-100">
+          {tiers.map((tier, index) => {
+            const isActive = index === selectedIndex
+            const yesPercent = (tier.yesPrice * 100).toFixed(0)
+            return (
+              <button
+                key={tier.market.address}
+                type="button"
+                onClick={() => setSelectedIndex(index)}
+                className={`flex w-full items-center gap-4 px-6 py-4 text-left transition ${
+                  isActive ? 'bg-cyan/5' : 'hover:bg-slate-50'
+                }`}
+              >
+                {/* Threshold label */}
+                <div className="w-28 shrink-0">
+                  <p className="text-sm font-semibold text-slate-900">{tier.desc.thresholdLabel}</p>
+                  <p className="text-[11px] text-muted">{formatAmount(tier.pool)} Vol.</p>
+                </div>
+
+                {/* Probability bar */}
+                <div className="flex flex-1 items-center gap-3">
+                  <span className="w-10 text-right text-sm font-bold text-slate-900">{yesPercent}%</span>
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all"
+                      style={{ width: `${yesPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Buy buttons */}
+                <div className="flex shrink-0 gap-2">
+                  <span className="rounded-xl bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                    Yes {yesPercent}¢
+                  </span>
+                  <span className="rounded-xl bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-700">
+                    No {(tier.noPrice * 100).toFixed(0)}¢
+                  </span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Right: Trade panel for selected tier */}
+        <div className="w-full border-t border-slate-200/60 xl:w-80 xl:border-l xl:border-t-0">
+          <div className="p-5">
+            <p className="text-xs font-medium text-muted">
+              {selected.desc.thresholdLabel} de-peg
+            </p>
+
+            {/* Yes / No selector */}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedSide('win')}
+                className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                  selectedSide === 'win'
+                    ? 'bg-emerald-500 text-white shadow-md'
+                    : 'border border-slate-200/80 bg-white/80 text-slate-600 hover:border-emerald-300'
+                }`}
+              >
+                Yes {(selected.yesPrice * 100).toFixed(0)}¢
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedSide('lose')}
+                className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                  selectedSide === 'lose'
+                    ? 'bg-rose-500 text-white shadow-md'
+                    : 'border border-slate-200/80 bg-white/80 text-slate-600 hover:border-rose-300'
+                }`}
+              >
+                No {(selected.noPrice * 100).toFixed(0)}¢
+              </button>
+            </div>
+
+            {/* Amount */}
+            <div className="mt-4">
+              <label className="text-xs font-medium text-muted">Amount</label>
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                type="number"
+                min="0"
+                step="0.01"
+                className="mt-1 w-full rounded-xl border border-slate-200/80 bg-white px-4 py-2.5 text-lg font-semibold text-slate-900 outline-none transition focus:border-cyan/40"
+                placeholder="0.00"
+              />
+            </div>
+
+            {/* Quick amounts */}
+            <div className="mt-2 flex gap-1.5">
+              {QUICK_AMOUNTS.map((qa) => (
+                <button
+                  key={qa}
+                  type="button"
+                  onClick={() => setAmount(qa)}
+                  className="flex-1 rounded-lg border border-slate-200/80 bg-white/80 py-1 text-[11px] font-medium text-slate-600 transition hover:border-cyan/30 hover:text-cyan"
+                >
+                  +{qa}
+                </button>
+              ))}
+            </div>
+
+            {/* Payout */}
+            {betAmountNum > 0 && (
+              <div className="mt-3 rounded-xl border border-slate-200/60 bg-slate-50/80 p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted">To win</span>
+                  <span className="text-base font-bold text-emerald-600">
+                    {potentialPayout.toFixed(4)} USDC
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-xs text-muted">Profit</span>
+                  <span className={`text-xs font-semibold ${profit > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                    +{profit.toFixed(4)} ({betAmountNum > 0 ? ((profit / betAmountNum) * 100).toFixed(0) : 0}%)
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Trade button */}
+            <button
+              type="button"
+              onClick={() => void onBet(selected.market.address, selectedSide, amount)}
+              disabled={selected.market.isSettled || isBusy || betAmountNum <= 0}
+              className={`mt-3 w-full rounded-xl px-4 py-3 text-sm font-semibold transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 ${
+                selectedSide === 'win'
+                  ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+                  : 'bg-rose-500 text-white hover:bg-rose-600'
+              }`}
+            >
+              {selectedSide === 'win' ? 'Buy Yes' : 'Buy No'}
+            </button>
+
+            {/* Withdraw */}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {isOwner && !selected.market.isSettled && (
+                <>
+                  <MiniButton label="Settle Yes" onClick={() => void onSettle(selected.market.address, 1)} disabled={isBusy} />
+                  <MiniButton label="Settle No" onClick={() => void onSettle(selected.market.address, 2)} disabled={isBusy} />
+                  <MiniButton label="Invalid" onClick={() => void onSettle(selected.market.address, 3)} disabled={isBusy} />
+                </>
+              )}
+              <MiniButton
+                label="Withdraw"
+                onClick={() => void onWithdraw(selected.market.address)}
+                disabled={!selected.market.isSettled || isBusy}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.article>
   )
 }
 
