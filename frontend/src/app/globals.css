@@ -44,6 +44,14 @@
   }
 }
 
+@layer base {
+  .recharts-wrapper,
+  .recharts-surface {
+    outline: none;
+    border: none;
+  }
+}
+
 @layer components {
   .glass-card {
     @apply border border-slate-200/80 bg-white/75 shadow-glow backdrop-blur-xl;
