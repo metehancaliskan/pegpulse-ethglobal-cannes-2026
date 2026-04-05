@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import type { ReactNode } from 'react'
 import './globals.css'
 import { Providers } from './providers'
+import PegPulseShell from '../App'
 
 export const metadata: Metadata = {
   title: 'PegPulse',
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <PegPulseShell>{children}</PegPulseShell>
+        </Providers>
       </body>
     </html>
   )

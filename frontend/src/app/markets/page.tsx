@@ -1,5 +1,5 @@
-import PegPulseApp from '../../App'
+import { redirect } from 'next/navigation'
 
-export default function MarketsPage() {
-  return <PegPulseApp mode="markets" />
+export default function MarketsRedirect() {
+  redirect('/')
 }

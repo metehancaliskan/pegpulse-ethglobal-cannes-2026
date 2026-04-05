@@ -1,12 +1,10 @@
-import type { StableSymbol } from './cmc'
-
 export type TVLData = {
-  symbol: StableSymbol
+  symbol: string
   tvl: number
   formattedTVL: string
 }
 
-export async function getStablecoinTVL(): Promise<Record<StableSymbol, TVLData>> {
+export async function getStablecoinTVL(): Promise<Record<string, TVLData>> {
   const res = await fetch('/api/tvl')
 
   if (!res.ok) {

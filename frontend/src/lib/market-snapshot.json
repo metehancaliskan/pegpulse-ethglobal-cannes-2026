@@ -1,0 +1,230 @@
+{
+  "owner": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d",
+  "markets": [
+    {
+      "address": "0x32ac10b41991df5d5686f6d1D90fC9054e7a2C10",
+      "description": "Will USDC depeg below $0.99 before Apr 10 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xB839A7E4dF141cB2e79F287B0C6A516C3d94cD6b",
+      "description": "Will USDC depeg below $0.99 before Apr 10 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x7a70316718161677B08eE81783122d2476863585",
+      "description": "Will USDC depeg below $0.99 before Apr 10 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x71a5ea36C89F7104df6C0BD9FeBC24c044169746",
+      "description": "Will EURC TVL drop below $300M before May 15 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xb7e09dE8B843E6912ca57d9b983149c84324A283",
+      "description": "Will EURC depeg below $0.97 before Apr 30 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x2F6Fa44a5b1F7C8AE0eb6dcAa27C624716A350B3",
+      "description": "Will USDC depeg below $0.99 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x3EB5204bDfc4883A23Ed2A5b29ba3AE06eD39543",
+      "description": "Will USDC depeg below $0.98 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xB81098Afe8DCaBFc7842F947eaE07E8835de8A62",
+      "description": "Will USDC depeg below $0.97 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x0d5E4cc70F6c9A7219704DbaF0AA7F738f7C3e6E",
+      "description": "Will USDC depeg below $0.95 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x58c7871B12C6A6971434Fe54F79CC76dAda9F2d0",
+      "description": "Will USDC depeg below $0.90 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xe8c3DC138395b72AF739988d44C207FC8f855F37",
+      "description": "[PEG:BRLA:1:24h] BRLA deviates >1% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x8C14EA046c8108D20ECdb15FB938E7f96018dE6D",
+      "description": "[PEG:BRLA:2:7d] BRLA deviates >2% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x55A217d5EE72aBAb1aC75b082a22f214891e4151",
+      "description": "[PEG:BRLA:3:7d] BRLA deviates >3% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x0bFaCBa3953950F7d4Cf09a4a9757367328e662d",
+      "description": "[PEG:MXNB:1:24h] MXNB deviates >1% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x6495DF046202714f8f0c925F0FB31f3b47c85682",
+      "description": "[PEG:MXNB:2:7d] MXNB deviates >2% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x186C78490d258E92d373208421a18aE4DB71C44a",
+      "description": "[PEG:MXNB:3:7d] MXNB deviates >3% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xf1Eb15e0b7b80E59358160da16fEEd157C1C098C",
+      "description": "[PEG:JPYC:0.5:24h] JPYC deviates >0.5% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x098FdBF60bAA5e5A0C9999F1DBbb280a0d556Dbe",
+      "description": "[PEG:JPYC:1:7d] JPYC deviates >1% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x18bEA04bF8cAEd44D7856EB991069C4DB6a23558",
+      "description": "[PEG:JPYC:2:7d] JPYC deviates >2% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x12Aa64A06a75d9e800a24C01f04DB6AEa0df7B2a",
+      "description": "[PEG:QCAD:1:24h] QCAD deviates >1% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x76c25616aD9C2556573206e1E2915A038971d31c",
+      "description": "[PEG:QCAD:2:7d] QCAD deviates >2% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x7f06754Dd7Fec42636431854db16ae2FEc1C4262",
+      "description": "[PEG:QCAD:3:7d] QCAD deviates >3% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xD3886C7D5C86222f9Cf8d302C0af4d7Fce5bD923",
+      "description": "[PEG:AUDF:1:24h] AUDF deviates >1% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x894D387b372c293E006791Ab1950aEa186001E38",
+      "description": "[PEG:AUDF:2:7d] AUDF deviates >2% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x5F8f8107b3300c6d711d985Adc3eD6AbE0E8EF3A",
+      "description": "[PEG:AUDF:3:7d] AUDF deviates >3% from peg before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xCAE3a1445C071CA041Ee74D928D7Cc10c0843c1e",
+      "description": "[GEO:JPYC:1:boj] JPYC deviates >1% around BoJ rate decision before Apr 30 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xB6D17596897d5dc7a86F6288E750d86e92e9BC4F",
+      "description": "[GEO:MXNB:1:banxico] MXNB deviates >1% around Banxico rate decision before May 15 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x73CEEA5A691E83C27D24eDA106d928d9Cc308121",
+      "description": "[GEO:QCAD:1:cpi] QCAD deviates >1% during Statistics Canada CPI release before May 1 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x045FA5E78aa751073C1236327Cf037f0d7810e68",
+      "description": "[GEO:BRLA:1:cpi] BRLA deviates >1% during Brazil CPI release before May 9 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xaA37A86A151FcC352BFc40F96f8ee27cA0d4B535",
+      "description": "[GEO:AUDF:1:rba] AUDF deviates >1% around RBA rate decision before May 6 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xF2BEda7130C1CEe91788156B11fcd9d6A94282F3",
+      "description": "[LIQ:BRLA:1:30m] BRLA trades outside 1% peg band for >30 consecutive minutes before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x3e9ABB3Da2D3EdC705aa8FC0BEeeEB63329f8bfb",
+      "description": "[LIQ:MXNB:1:30m] MXNB trades outside 1% peg band for >30 consecutive minutes before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xbECFc77476C72d14A2cb6Ccd2E23a82Ac4819758",
+      "description": "[LIQ:JPYC:0.5:1h] JPYC trades outside 0.5% peg band for >1 hour before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xD6EAF342b21E54410355D097b81c144F73e4DDB4",
+      "description": "[LIQ:QCAD:1:30m] QCAD trades outside 1% peg band for >30 consecutive minutes before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xbeBb49ABf9b14F1D82f787036aA8B02c7d7409D6",
+      "description": "[LIQ:AUDF:1:30m] AUDF trades outside 1% peg band for >30 consecutive minutes before Apr 20 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x8B7688870EdC8a18441f3C4aB80E5a72B192551b",
+      "description": "Will EURC depeg below €0.99 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xA183ABF8Ba6c6b908804F60b138bD6c133639559",
+      "description": "Will EURC depeg below €0.98 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xE56435a644aAA34722a42C57c6e8579Fc2aD1f5B",
+      "description": "Will EURC depeg below €0.97 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xcA6d8c95c79b06f8AFeA9727C8CEB9Ea5275Edf9",
+      "description": "Will EURC depeg below €0.95 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xf4273140ca97A295Bea005cC8C0b47F1d60C911E",
+      "description": "Will EURC depeg below €0.90 before Jul 1 2026 18:00 UTC?",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xe5Ba92fc65e7092E1BBe010060f27cC68Fd7c723",
+      "description": "[RWA:USYC:yield<1:eoy] Will USYC estimated net yield be below 1% by Dec 31 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0xC11c74e2E0D6cece7296A7844ffcaa029FCB84f7",
+      "description": "[RWA:USYC:yield<2:eoy] Will USYC estimated net yield be below 2% by Dec 31 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x375376cFa5E09F685cbb0d5b9aB7735B3388869A",
+      "description": "[RWA:USYC:yield<3:eoy] Will USYC estimated net yield be below 3% by Dec 31 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x715674a1d70225A1ae63dd2C93aF855e4718351e",
+      "description": "[RWA:USYC:yield>4:eoy] Will USYC estimated net yield be above 4% by Dec 31 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    },
+    {
+      "address": "0x23A9A167B1B237B8B2a6d86dcd63Ca09C3163734",
+      "description": "[RWA:USYC:yield>5:eoy] Will USYC estimated net yield be above 5% by Dec 31 2026 23:59 UTC",
+      "oracle": "0x05DA35114161ffA719C03F38b8E404628AFd8E0d"
+    }
+  ]
+}

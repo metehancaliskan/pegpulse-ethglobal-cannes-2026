@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-const DEFILLAMA_IDS: Record<string, number> = { USDC: 2, EURC: 50 }
-const PEGGED_KEYS: Record<string, string> = { USDC: 'peggedUSD', EURC: 'peggedEUR' }
+const DEFILLAMA_IDS: Record<string, number> = { USDC: 2, EURC: 50, JPYC: 355, BRLA: 365 }
+const PEGGED_KEYS: Record<string, string> = { USDC: 'peggedUSD', EURC: 'peggedEUR', JPYC: 'peggedJPY', BRLA: 'peggedREAL' }
 
 function formatTVL(value: number): string {
   if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`

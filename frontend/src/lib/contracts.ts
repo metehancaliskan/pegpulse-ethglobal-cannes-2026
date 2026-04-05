@@ -9,6 +9,7 @@ import {
 } from 'viem'
 import { writeContract } from 'viem/actions'
 import { arcTestnet } from './wallet'
+import snapshot from './market-snapshot.json'
 
 export const ARC_NETWORK = {
   chainId: arcTestnet.id,
@@ -40,6 +41,7 @@ export const MARKET_ABI = parseAbi([
   'function betLose() payable',
   'function settleMarket(uint8 _outcome)',
   'function withdrawWinnings()',
+  'function exitOpenStake(bool onWinSide, uint256 amount)',
 ])
 
 export type MarketOutcome = 0 | 1 | 2 | 3
@@ -61,92 +63,105 @@ type DashboardData = {
   markets: MarketView[]
 }
 
-const publicClient = createPublicClient({
+export const publicClient = createPublicClient({
   chain: arcTestnet,
   transport: http(ARC_NETWORK.rpcUrl),
 })
 
-export async function fetchDashboardData(userAddress?: string): Promise<DashboardData> {
-  const [owner, marketAddresses] = await Promise.all([
-    publicClient.readContract({
-      address: FACTORY_ADDRESS,
-      abi: FACTORY_ABI,
-      functionName: 'owner',
-    }),
-    publicClient.readContract({
-      address: FACTORY_ADDRESS,
-      abi: FACTORY_ABI,
-      functionName: 'getMarkets',
-    }),
-  ])
+type SnapshotMarket = { address: string; description: string; oracle: string }
+const staticMarkets: SnapshotMarket[] = (snapshot as { owner: string; markets: SnapshotMarket[] }).markets
+const staticOwner: string = (snapshot as { owner: string }).owner
 
-  const markets = await Promise.all(
-    marketAddresses.map(async (address) => {
-      const [description, oracle, isSettled, outcome, totalWinBets, totalLoseBets, userWinBet, userLoseBet] =
-        await Promise.all([
-          publicClient.readContract({
-            address,
-            abi: MARKET_ABI,
-            functionName: 'description',
-          }),
-          publicClient.readContract({
-            address,
-            abi: MARKET_ABI,
-            functionName: 'oracle',
-          }),
-          publicClient.readContract({
-            address,
-            abi: MARKET_ABI,
-            functionName: 'isSettled',
-          }),
-          publicClient.readContract({
-            address,
-            abi: MARKET_ABI,
-            functionName: 'marketOutcome',
-          }),
-          publicClient.readContract({
-            address,
-            abi: MARKET_ABI,
-            functionName: 'totalWinBets',
-          }),
-          publicClient.readContract({
-            address,
-            abi: MARKET_ABI,
-            functionName: 'totalLoseBets',
-          }),
-          userAddress
-            ? publicClient.readContract({
-                address,
-                abi: MARKET_ABI,
-                functionName: 'winBets',
-                args: [userAddress as Address],
-              })
-            : Promise.resolve(0n),
-          userAddress
-            ? publicClient.readContract({
-                address,
-                abi: MARKET_ABI,
-                functionName: 'loseBets',
-                args: [userAddress as Address],
-              })
-            : Promise.resolve(0n),
-        ])
+function buildStaticViews(): MarketView[] {
+  return [...staticMarkets].reverse().map((sm) => ({
+    address: sm.address,
+    description: sm.description,
+    oracle: sm.oracle,
+    isSettled: false,
+    outcome: 0 as MarketOutcome,
+    totalWinBets: 0n,
+    totalLoseBets: 0n,
+    userWinBet: 0n,
+    userLoseBet: 0n,
+  }))
+}
 
-      return {
-        address,
-        description,
-        oracle,
-        isSettled,
-        outcome: outcome as MarketOutcome,
-        totalWinBets,
-        totalLoseBets,
-        userWinBet,
-        userLoseBet,
+export async function fetchSingleMarketDynamic(
+  marketAddress: string,
+  userAddress?: string,
+): Promise<Partial<MarketView>> {
+  const addr = marketAddress as Address
+  try {
+    const calls = [
+      publicClient.readContract({ address: addr, abi: MARKET_ABI, functionName: 'isSettled' }),
+      publicClient.readContract({ address: addr, abi: MARKET_ABI, functionName: 'marketOutcome' }),
+      publicClient.readContract({ address: addr, abi: MARKET_ABI, functionName: 'totalWinBets' }),
+      publicClient.readContract({ address: addr, abi: MARKET_ABI, functionName: 'totalLoseBets' }),
+    ] as const
+
+    const userCalls = userAddress
+      ? [
+          publicClient.readContract({ address: addr, abi: MARKET_ABI, functionName: 'winBets', args: [userAddress as Address] }),
+          publicClient.readContract({ address: addr, abi: MARKET_ABI, functionName: 'loseBets', args: [userAddress as Address] }),
+        ] as const
+      : []
+
+    const results = await Promise.all([...calls, ...userCalls])
+
+    return {
+      isSettled: results[0] as boolean,
+      outcome: (results[1] as number) as MarketOutcome,
+      totalWinBets: results[2] as bigint,
+      totalLoseBets: results[3] as bigint,
+      userWinBet: userAddress ? (results[4] as bigint) : 0n,
+      userLoseBet: userAddress ? (results[5] as bigint) : 0n,
+    }
+  } catch {
+    return {}
+  }
+}
+
+/** Parallel batches of eth_call — Arc RPC often lacks working aggregate3 multicall; detail page uses the same reads. */
+const ENRICH_BATCH_SIZE = 6
+
+async function enrichMarketsFromChain(markets: MarketView[], userAddress?: string): Promise<MarketView[]> {
+  if (markets.length === 0) return markets
+
+  const out: MarketView[] = []
+
+  for (let i = 0; i < markets.length; i += ENRICH_BATCH_SIZE) {
+    const batch = markets.slice(i, i + ENRICH_BATCH_SIZE)
+    const dynamics = await Promise.all(
+      batch.map((m) => fetchSingleMarketDynamic(m.address, userAddress)),
+    )
+
+    for (let j = 0; j < batch.length; j++) {
+      const m = batch[j]
+      const dyn = dynamics[j]
+      const hasPools = dyn.totalWinBets !== undefined && dyn.totalLoseBets !== undefined
+      if (!hasPools) {
+        out.push(m)
+        continue
       }
-    }),
-  )
+      out.push({
+        ...m,
+        isSettled: dyn.isSettled ?? m.isSettled,
+        outcome: (dyn.outcome ?? m.outcome) as MarketOutcome,
+        totalWinBets: dyn.totalWinBets!,
+        totalLoseBets: dyn.totalLoseBets!,
+        userWinBet: dyn.userWinBet ?? 0n,
+        userLoseBet: dyn.userLoseBet ?? 0n,
+      })
+    }
+  }
 
-  return { owner, markets: [...markets].reverse() }
+  return out
+}
+
+export async function fetchDashboardData(userAddress?: string): Promise<DashboardData> {
+  const base = buildStaticViews()
+  const markets = await enrichMarketsFromChain(base, userAddress)
+  return { owner: staticOwner, markets }
 }
 
 function getWalletAccount(walletClient: WalletClient) {
@@ -214,6 +229,27 @@ export async function withdrawWinnings(walletClient: WalletClient, marketAddress
     address: marketAddress as Address,
     abi: MARKET_ABI,
     functionName: 'withdrawWinnings',
+  })
+
+  await publicClient.waitForTransactionReceipt({ hash })
+}
+
+/** Return stake from an open market (partial or full). Requires deployed contract with exitOpenStake. */
+export async function exitOpenStake(
+  walletClient: WalletClient,
+  marketAddress: string,
+  onWinSide: boolean,
+  amountEther: string,
+) {
+  const value = parseEther(amountEther)
+  if (value <= 0n) throw new Error('Amount must be greater than zero.')
+  const hash = await writeContract(walletClient, {
+    chain: arcTestnet,
+    account: getWalletAccount(walletClient),
+    address: marketAddress as Address,
+    abi: MARKET_ABI,
+    functionName: 'exitOpenStake',
+    args: [onWinSide, value],
   })
 
   await publicClient.waitForTransactionReceipt({ hash })

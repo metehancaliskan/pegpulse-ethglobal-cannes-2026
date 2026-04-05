@@ -1,65 +1,23 @@
-export type StableSymbol = 'USDC' | 'EURC'
-
-type CoinMarketCapQuoteResponse = {
-  data: Record<
-    StableSymbol,
-    {
-      quote: {
-        USD: {
-          price: number
-          percent_change_24h: number
-          last_updated: string
-        }
-      }
-    }
-  >
-}
+export type StableSymbol = 'USDC' | 'EURC' | 'BRLA' | 'JPYC' | 'MXNB' | 'AUDF' | 'QCAD'
 
 export type StableQuote = {
-  symbol: StableSymbol
+  symbol: string
   price: number
   percentChange24h: number
   lastUpdated: string
+  /** CAD/USD oracle; QCAD peg health = price / pegReferenceUsd vs 1 */
+  pegReferenceUsd?: number
 }
 
-export async function getStableQuotes(): Promise<Record<StableSymbol, StableQuote>> {
-  const apiKey = process.env.NEXT_PUBLIC_X_CMC_PRO_API_KEY?.trim()
+export async function getStableQuotes(): Promise<Record<string, StableQuote>> {
+  const res = await fetch('/api/quotes')
 
-  if (!apiKey) {
-    throw new Error('Set NEXT_PUBLIC_X_CMC_PRO_API_KEY in frontend/.env to load live stablecoin prices.')
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error((body as { error?: string }).error ?? `CoinGecko quotes request failed: ${res.status}`)
   }
 
-  const url = new URL('https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest')
-  url.searchParams.set('symbol', 'USDC,EURC')
-  url.searchParams.set('convert', 'USD')
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      'X-CMC_PRO_API_KEY': apiKey,
-      Accept: 'application/json',
-    },
-  })
-
-  if (!response.ok) {
-    throw new Error(`CMC request failed with status ${response.status}.`)
-  }
-
-  const payload = (await response.json()) as CoinMarketCapQuoteResponse
-
-  return {
-    USDC: {
-      symbol: 'USDC',
-      price: payload.data.USDC.quote.USD.price,
-      percentChange24h: payload.data.USDC.quote.USD.percent_change_24h,
-      lastUpdated: payload.data.USDC.quote.USD.last_updated,
-    },
-    EURC: {
-      symbol: 'EURC',
-      price: payload.data.EURC.quote.USD.price,
-      percentChange24h: payload.data.EURC.quote.USD.percent_change_24h,
-      lastUpdated: payload.data.EURC.quote.USD.last_updated,
-    },
-  }
+  return res.json()
 }
 
 export function getStableHealthScore(price: number) {
